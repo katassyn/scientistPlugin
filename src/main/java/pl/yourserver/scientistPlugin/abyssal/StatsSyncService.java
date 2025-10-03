@@ -49,29 +49,21 @@ public class StatsSyncService implements Listener {
             if (stats == null) return;
 
             // Reset only the fields we manage by reapplying as additive deltas (keep class skills intact)
-            double critAdd = 0.0;
-            double critDmgAdd = 0.0;
-            double atkSpeedAdd = 0.0;
-            double luckAdd = 0.0;
-            double spellMultAdd = 0.0; // as multiplier addition (e.g., +0.05 for 5%)
-            double cdrAdd = 0.0; // cooldown reduction %
-            double channelSpeedAdd = 0.0; // channeling speed %
-            double auraPotencyAdd = 0.0; // aura potency %
-            double auraRadiusAdd = 0.0; // aura radius %
+            StatAccumulator acc = new StatAccumulator();
 
             // Iterate over armor and hand items
             applyModifier(p.getInventory().getItem(EquipmentSlot.HEAD), (key, val) -> {
                 switch (key) {
-                    case "clairvoyance" -> critAdd += val;
-                    case "lucidity" -> cdrAdd += val;
-                    case "mindforge" -> spellMultAdd += val / 100.0;
-                    case "third_eye" -> critDmgAdd += val; // approx
+                    case "clairvoyance" -> acc.addCritChance(val);
+                    case "lucidity" -> acc.addCooldownReduction(val);
+                    case "mindforge" -> acc.addSpellMultiplier(val / 100.0);
+                    case "third_eye" -> acc.addCritDamage(val); // approx
                 }
             });
             applyModifier(p.getInventory().getItem(EquipmentSlot.HAND), (key, val) -> {
                 switch (key) {
-                    case "cold_focus" -> critDmgAdd += val;
-                    case "chrono_edge" -> atkSpeedAdd += val;
+                    case "cold_focus" -> acc.addCritDamage(val);
+                    case "chrono_edge" -> acc.addAttackSpeed(val);
                 }
             });
             applyModifier(p.getInventory().getItem(EquipmentSlot.FEET), (key, val) -> {
@@ -94,19 +86,19 @@ public class StatsSyncService implements Listener {
                             applyModifier(is, (key, val) -> {
                                 switch (key) {
                                     case "prosperity", "harvesters_touch" -> { /* LUCK handled below */ }
-                                    case "precision" -> critAdd += val;
-                                    case "quick_hands" -> atkSpeedAdd += val;
+                                    case "precision" -> acc.addCritChance(val);
+                                    case "quick_hands" -> acc.addAttackSpeed(val);
                                     case "leech_amp" -> { /* store for PDC */ }
-                                    case "arcane_attunement" -> cdrAdd += val;
-                                    case "ritual_focus" -> channelSpeedAdd += val;
-                                    case "oath_sigil" -> auraPotencyAdd += val;
-                                    case "harmonize" -> auraRadiusAdd += val;
+                                    case "arcane_attunement" -> acc.addCooldownReduction(val);
+                                    case "ritual_focus" -> acc.addChannelSpeed(val);
+                                    case "oath_sigil" -> acc.addAuraPotency(val);
+                                    case "harmonize" -> acc.addAuraRadius(val);
                                 }
                             });
                             // read raw for leech_amp specifically
                             leechAmp += readValue(is, "leech_amp");
-                            luckAdd += readValue(is, "prosperity");
-                            luckAdd += readValue(is, "harvesters_touch");
+                            acc.addLuckBonus(readValue(is, "prosperity"));
+                            acc.addLuckBonus(readValue(is, "harvesters_touch"));
                         }
                     }
                     // Persist leech amp on player PDC for effects to read
@@ -117,6 +109,17 @@ public class StatsSyncService implements Listener {
                     }
                 }
             } catch (Throwable ignored) { }
+
+            // Resolve final additive values
+            double critAdd = acc.getCritChance();
+            double critDmgAdd = acc.getCritDamage();
+            double atkSpeedAdd = acc.getAttackSpeed();
+            double luckAdd = acc.getLuckBonus();
+            double spellMultAdd = acc.getSpellMultiplier();
+            double cdrAdd = acc.getCooldownReduction();
+            double channelSpeedAdd = acc.getChannelSpeed();
+            double auraPotencyAdd = acc.getAuraPotency();
+            double auraRadiusAdd = acc.getAuraRadius();
 
             // Apply to PlayerSkillStats via reflection
             Class<?> statsCls = stats.getClass();
@@ -168,6 +171,38 @@ public class StatsSyncService implements Listener {
     }
 
     private interface Applier { void apply(String key, double value); }
+
+    private static final class StatAccumulator {
+        private double critChance;
+        private double critDamage;
+        private double attackSpeed;
+        private double luckBonus;
+        private double spellMultiplier;
+        private double cooldownReduction;
+        private double channelSpeed;
+        private double auraPotency;
+        private double auraRadius;
+
+        void addCritChance(double value) { critChance += value; }
+        void addCritDamage(double value) { critDamage += value; }
+        void addAttackSpeed(double value) { attackSpeed += value; }
+        void addLuckBonus(double value) { luckBonus += value; }
+        void addSpellMultiplier(double value) { spellMultiplier += value; }
+        void addCooldownReduction(double value) { cooldownReduction += value; }
+        void addChannelSpeed(double value) { channelSpeed += value; }
+        void addAuraPotency(double value) { auraPotency += value; }
+        void addAuraRadius(double value) { auraRadius += value; }
+
+        double getCritChance() { return critChance; }
+        double getCritDamage() { return critDamage; }
+        double getAttackSpeed() { return attackSpeed; }
+        double getLuckBonus() { return luckBonus; }
+        double getSpellMultiplier() { return spellMultiplier; }
+        double getCooldownReduction() { return cooldownReduction; }
+        double getChannelSpeed() { return channelSpeed; }
+        double getAuraPotency() { return auraPotency; }
+        double getAuraRadius() { return auraRadius; }
+    }
 
     private void applyModifier(ItemStack item, Applier applier) {
         if (item == null) return;

@@ -1,0 +1,59 @@
+main:
+  title: "Scientist Lab"
+  size: 27
+  layout:
+    research_slot: 11
+    recipe_slot: 13
+    abyssal_slot: 15
+    help_slot: 26
+  icons:
+    research: { material: BREWING_STAND, name: "&aResearch Lab" }
+    recipe: { material: BOOK, name: "&eRecipe Book" }
+    abyssal: { material: ENCHANTING_TABLE, name: "&5Abyssal Enchanting" }
+    help: { material: KNOWLEDGE_BOOK, name: "&7Help" }
+
+research:
+  title: "Research Lab"
+  size: 45
+  layout:
+    start_button: 40
+    input_slots: [ 10, 11, 12, 19, 20, 21, 28, 29, 30 ]
+  icons:
+    start: { material: LIME_DYE, name: "&aStart Experiment" }
+
+recipes:
+  title: "Recipe Book"
+  size: 54
+  layout:
+    next: 53
+    prev: 45
+  icons:
+    next: { material: ARROW, name: "&aNext" }
+    prev: { material: ARROW, name: "&aPrev" }
+
+abyssal:
+  title: "Abyssal Enchanting"
+  size: 45
+  layout:
+    target_slot: 20
+    bone_slot: 24
+    roll_button: 31
+    select_a: 30
+    select_b: 32
+    reject: 40
+  icons:
+    roll: { material: ENDER_EYE, name: "&dRoll" }
+    a: { material: GREEN_DYE, name: "&aSelect A" }
+    b: { material: BLUE_DYE, name: "&9Select B" }
+    reject: { material: BARRIER, name: "&cReject" }
+
+confirm:
+  title: "Confirm Abyssal Application"
+  size: 27
+  layout:
+    yes: 11
+    no: 15
+  icons:
+    yes: { material: LIME_WOOL, name: "&aConfirm" }
+    no: { material: RED_WOOL, name: "&cCancel" }
+

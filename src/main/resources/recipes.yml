@@ -1,0 +1,421 @@
+# Each recipe defines reagents and duration
+recipes:
+  corrupted_petal_study:
+    title: "Corrupted Petal Study"
+    description: "Study corrupted petals to attune the lab."
+    reagents:
+      corrupted_petal_I: 16
+    duration_hours: 2
+    experiments_to_unlock: 5
+  blood_amber_infuse:
+    title: "Blood Amber Infusion"
+    description: "Infuse the lab with blood amber."
+    reagents:
+      blood_amber_I: 12
+    duration_hours: 3
+    experiments_to_unlock: 5
+  abyss_bone_t1:
+    title: "Abyssal Bone Research I"
+    description: "Unlock Tier I Abyss Bone crafting."
+    reagents:
+      corrupted_petal_I: 16
+      blood_amber_I: 8
+    duration_hours: 3
+    experiments_to_unlock: 5
+  abyss_bone_t2:
+    title: "Abyssal Bone Research II"
+    description: "Unlock Tier II Abyss Bone crafting."
+    reagents:
+      corrupted_petal_II: 12
+      blood_amber_II: 6
+    duration_hours: 6
+    experiments_to_unlock: 5
+  abyss_bone_t3:
+    title: "Abyssal Bone Research III"
+    description: "Unlock Tier III Abyss Bone crafting."
+    reagents:
+      corrupted_petal_III: 8
+      blood_amber_III: 4
+    duration_hours: 10
+    experiments_to_unlock: 5
+  # ========== PER-CATEGORY ABYSSAL BONE UNLOCKS ==========
+  # Durations: T1 ~3 days (72h), T2 ~1 week (168h), T3 ~2 weeks (336h)
+  # Each requires 5 experiments to unlock (20% per completion)
+
+  # WEAPON
+  unlock_weapon_I:
+    title: "Unlock Abyssal Weapon Bone I"
+    description: "Research abyssal catalysts for weapons (Tier I)."
+    reagents:
+      void_shard_I: 48
+      ember_powder_I: 24
+      rift_fibre_I: 24
+    duration_hours: 72
+    experiments_to_unlock: 5
+  unlock_weapon_II:
+    title: "Unlock Abyssal Weapon Bone II"
+    description: "Deepen weapon catalyst studies (Tier II)."
+    requires: [ unlock_weapon_I ]
+    reagents:
+      void_shard_II: 128
+      ember_powder_II: 64
+    duration_hours: 168
+    experiments_to_unlock: 5
+  unlock_weapon_III:
+    title: "Unlock Abyssal Weapon Bone III"
+    description: "Master weapon catalysts (Tier III)."
+    requires: [ unlock_weapon_II ]
+    reagents:
+      void_shard_III: 256
+      ember_powder_III: 128
+      rift_fibre_III: 64
+    duration_hours: 336
+    experiments_to_unlock: 5
+
+  # ARMOR_HELM
+  unlock_helm_I:
+    title: "Unlock Abyssal Helm Bone I"
+    description: "Research abyssal catalysts for helms (Tier I)."
+    reagents:
+      frost_core_I: 48
+      soul_residue_I: 24
+    duration_hours: 72
+    experiments_to_unlock: 5
+  unlock_helm_II:
+    title: "Unlock Abyssal Helm Bone II"
+    description: "Deepen helm catalyst studies (Tier II)."
+    requires: [ unlock_helm_I ]
+    reagents:
+      frost_core_II: 128
+      soul_residue_II: 64
+    duration_hours: 168
+    experiments_to_unlock: 5
+  unlock_helm_III:
+    title: "Unlock Abyssal Helm Bone III"
+    description: "Master helm catalysts (Tier III)."
+    requires: [ unlock_helm_II ]
+    reagents:
+      frost_core_III: 256
+      soul_residue_III: 128
+      gloom_lotus_III: 64
+    duration_hours: 336
+    experiments_to_unlock: 5
+
+  # ARMOR_CHEST
+  unlock_chest_I:
+    title: "Unlock Abyssal Chest Bone I"
+    description: "Research catalysts for chest armor (Tier I)."
+    reagents:
+      ancient_bone_dust_I: 48
+      shadow_ash_I: 24
+    duration_hours: 72
+    experiments_to_unlock: 5
+  unlock_chest_II:
+    title: "Unlock Abyssal Chest Bone II"
+    description: "Deepen chest catalyst studies (Tier II)."
+    requires: [ unlock_chest_I ]
+    reagents:
+      ancient_bone_dust_II: 128
+      shadow_ash_II: 64
+    duration_hours: 168
+    experiments_to_unlock: 5
+  unlock_chest_III:
+    title: "Unlock Abyssal Chest Bone III"
+    description: "Master chest catalysts (Tier III)."
+    requires: [ unlock_chest_II ]
+    reagents:
+      ancient_bone_dust_III: 256
+      shadow_ash_III: 128
+      soul_residue_III: 64
+    duration_hours: 336
+    experiments_to_unlock: 5
+
+  # ARMOR_LEGS
+  unlock_legs_I:
+    title: "Unlock Abyssal Legs Bone I"
+    description: "Research catalysts for leg armor (Tier I)."
+    reagents:
+      rift_fibre_I: 48
+      frost_core_I: 24
+    duration_hours: 72
+    experiments_to_unlock: 5
+  unlock_legs_II:
+    title: "Unlock Abyssal Legs Bone II"
+    description: "Deepen leg catalyst studies (Tier II)."
+    requires: [ unlock_legs_I ]
+    reagents:
+      rift_fibre_II: 128
+      frost_core_II: 64
+    duration_hours: 168
+    experiments_to_unlock: 5
+  unlock_legs_III:
+    title: "Unlock Abyssal Legs Bone III"
+    description: "Master leg catalysts (Tier III)."
+    requires: [ unlock_legs_II ]
+    reagents:
+      rift_fibre_III: 256
+      frost_core_III: 128
+      shadow_ash_III: 64
+    duration_hours: 336
+    experiments_to_unlock: 5
+
+  # ARMOR_BOOTS
+  unlock_boots_I:
+    title: "Unlock Abyssal Boots Bone I"
+    description: "Research catalysts for boots (Tier I)."
+    reagents:
+      shadow_ash_I: 48
+      storm_pearl_I: 24
+    duration_hours: 72
+    experiments_to_unlock: 5
+  unlock_boots_II:
+    title: "Unlock Abyssal Boots Bone II"
+    description: "Deepen boots catalyst studies (Tier II)."
+    requires: [ unlock_boots_I ]
+    reagents:
+      shadow_ash_II: 128
+      storm_pearl_II: 64
+    duration_hours: 168
+    experiments_to_unlock: 5
+  unlock_boots_III:
+    title: "Unlock Abyssal Boots Bone III"
+    description: "Master boots catalysts (Tier III)."
+    requires: [ unlock_boots_II ]
+    reagents:
+      shadow_ash_III: 256
+      storm_pearl_III: 128
+      rift_fibre_III: 64
+    duration_hours: 336
+    experiments_to_unlock: 5
+
+  # ACCESSORY_RING1
+  unlock_ring1_I:
+    title: "Unlock Abyssal Ring 1 Bone I"
+    description: "Research catalysts for Ring 1 (Tier I)."
+    reagents:
+      storm_pearl_I: 48
+      gloom_lotus_I: 24
+    duration_hours: 72
+    experiments_to_unlock: 5
+  unlock_ring1_II:
+    title: "Unlock Abyssal Ring 1 Bone II"
+    description: "Deepen Ring 1 catalyst studies (Tier II)."
+    requires: [ unlock_ring1_I ]
+    reagents:
+      storm_pearl_II: 128
+      gloom_lotus_II: 64
+    duration_hours: 168
+    experiments_to_unlock: 5
+  unlock_ring1_III:
+    title: "Unlock Abyssal Ring 1 Bone III"
+    description: "Master Ring 1 catalysts (Tier III)."
+    requires: [ unlock_ring1_II ]
+    reagents:
+      storm_pearl_III: 256
+      gloom_lotus_III: 128
+      soul_residue_III: 64
+    duration_hours: 336
+    experiments_to_unlock: 5
+
+  # ACCESSORY_RING2
+  unlock_ring2_I:
+    title: "Unlock Abyssal Ring 2 Bone I"
+    description: "Research catalysts for Ring 2 (Tier I)."
+    reagents:
+      storm_pearl_I: 48
+      void_shard_I: 24
+    duration_hours: 72
+    experiments_to_unlock: 5
+  unlock_ring2_II:
+    title: "Unlock Abyssal Ring 2 Bone II"
+    description: "Deepen Ring 2 catalyst studies (Tier II)."
+    requires: [ unlock_ring2_I ]
+    reagents:
+      storm_pearl_II: 128
+      void_shard_II: 64
+    duration_hours: 168
+    experiments_to_unlock: 5
+  unlock_ring2_III:
+    title: "Unlock Abyssal Ring 2 Bone III"
+    description: "Master Ring 2 catalysts (Tier III)."
+    requires: [ unlock_ring2_II ]
+    reagents:
+      storm_pearl_III: 256
+      void_shard_III: 128
+      rift_fibre_III: 64
+    duration_hours: 336
+    experiments_to_unlock: 5
+
+  # ACCESSORY_NECKLACE
+  unlock_necklace_I:
+    title: "Unlock Abyssal Necklace Bone I"
+    description: "Research catalysts for Necklace (Tier I)."
+    reagents:
+      soul_residue_I: 48
+      ember_powder_I: 24
+    duration_hours: 72
+    experiments_to_unlock: 5
+  unlock_necklace_II:
+    title: "Unlock Abyssal Necklace Bone II"
+    description: "Deepen Necklace catalyst studies (Tier II)."
+    requires: [ unlock_necklace_I ]
+    reagents:
+      soul_residue_II: 128
+      ember_powder_II: 64
+    duration_hours: 168
+    experiments_to_unlock: 5
+  unlock_necklace_III:
+    title: "Unlock Abyssal Necklace Bone III"
+    description: "Master Necklace catalysts (Tier III)."
+    requires: [ unlock_necklace_II ]
+    reagents:
+      soul_residue_III: 256
+      ember_powder_III: 128
+      void_shard_III: 64
+    duration_hours: 336
+    experiments_to_unlock: 5
+
+  # ACCESSORY_ADORNMENT
+  unlock_adornment_I:
+    title: "Unlock Abyssal Adornment Bone I"
+    description: "Research catalysts for Adornment (Tier I)."
+    reagents:
+      gloom_lotus_I: 48
+      rift_fibre_I: 24
+    duration_hours: 72
+    experiments_to_unlock: 5
+  unlock_adornment_II:
+    title: "Unlock Abyssal Adornment Bone II"
+    description: "Deepen Adornment catalyst studies (Tier II)."
+    requires: [ unlock_adornment_I ]
+    reagents:
+      gloom_lotus_II: 128
+      rift_fibre_II: 64
+    duration_hours: 168
+    experiments_to_unlock: 5
+  unlock_adornment_III:
+    title: "Unlock Abyssal Adornment Bone III"
+    description: "Master Adornment catalysts (Tier III)."
+    requires: [ unlock_adornment_II ]
+    reagents:
+      gloom_lotus_III: 256
+      rift_fibre_III: 128
+      shadow_ash_III: 64
+    duration_hours: 336
+    experiments_to_unlock: 5
+
+  # ACCESSORY_CLOAK
+  unlock_cloak_I:
+    title: "Unlock Abyssal Cloak Bone I"
+    description: "Research catalysts for Cloak (Tier I)."
+    reagents:
+      shadow_ash_I: 48
+      storm_pearl_I: 24
+    duration_hours: 72
+    experiments_to_unlock: 5
+  unlock_cloak_II:
+    title: "Unlock Abyssal Cloak Bone II"
+    description: "Deepen Cloak catalyst studies (Tier II)."
+    requires: [ unlock_cloak_I ]
+    reagents:
+      shadow_ash_II: 128
+      storm_pearl_II: 64
+    duration_hours: 168
+    experiments_to_unlock: 5
+  unlock_cloak_III:
+    title: "Unlock Abyssal Cloak Bone III"
+    description: "Master Cloak catalysts (Tier III)."
+    requires: [ unlock_cloak_II ]
+    reagents:
+      shadow_ash_III: 256
+      storm_pearl_III: 128
+      gloom_lotus_III: 64
+    duration_hours: 336
+    experiments_to_unlock: 5
+
+  # ACCESSORY_SHIELD
+  unlock_shield_I:
+    title: "Unlock Abyssal Shield Bone I"
+    description: "Research catalysts for Shield (Tier I)."
+    reagents:
+      ancient_bone_dust_I: 48
+      soul_residue_I: 24
+    duration_hours: 72
+    experiments_to_unlock: 5
+  unlock_shield_II:
+    title: "Unlock Abyssal Shield Bone II"
+    description: "Deepen Shield catalyst studies (Tier II)."
+    requires: [ unlock_shield_I ]
+    reagents:
+      ancient_bone_dust_II: 128
+      soul_residue_II: 64
+    duration_hours: 168
+    experiments_to_unlock: 5
+  unlock_shield_III:
+    title: "Unlock Abyssal Shield Bone III"
+    description: "Master Shield catalysts (Tier III)."
+    requires: [ unlock_shield_II ]
+    reagents:
+      ancient_bone_dust_III: 256
+      soul_residue_III: 128
+      frost_core_III: 64
+    duration_hours: 336
+    experiments_to_unlock: 5
+
+  # ACCESSORY_BELT
+  unlock_belt_I:
+    title: "Unlock Abyssal Belt Bone I"
+    description: "Research catalysts for Belt (Tier I)."
+    reagents:
+      ancient_bone_dust_I: 48
+      ember_powder_I: 24
+    duration_hours: 72
+    experiments_to_unlock: 5
+  unlock_belt_II:
+    title: "Unlock Abyssal Belt Bone II"
+    description: "Deepen Belt catalyst studies (Tier II)."
+    requires: [ unlock_belt_I ]
+    reagents:
+      ancient_bone_dust_II: 128
+      ember_powder_II: 64
+    duration_hours: 168
+    experiments_to_unlock: 5
+  unlock_belt_III:
+    title: "Unlock Abyssal Belt Bone III"
+    description: "Master Belt catalysts (Tier III)."
+    requires: [ unlock_belt_II ]
+    reagents:
+      ancient_bone_dust_III: 256
+      ember_powder_III: 128
+      void_shard_III: 64
+    duration_hours: 336
+    experiments_to_unlock: 5
+
+  # ACCESSORY_GLOVES
+  unlock_gloves_I:
+    title: "Unlock Abyssal Gloves Bone I"
+    description: "Research catalysts for Gloves (Tier I)."
+    reagents:
+      rift_fibre_I: 48
+      ember_powder_I: 24
+    duration_hours: 72
+    experiments_to_unlock: 5
+  unlock_gloves_II:
+    title: "Unlock Abyssal Gloves Bone II"
+    description: "Deepen Gloves catalyst studies (Tier II)."
+    requires: [ unlock_gloves_I ]
+    reagents:
+      rift_fibre_II: 128
+      ember_powder_II: 64
+    duration_hours: 168
+    experiments_to_unlock: 5
+  unlock_gloves_III:
+    title: "Unlock Abyssal Gloves Bone III"
+    description: "Master Gloves catalysts (Tier III)."
+    requires: [ unlock_gloves_II ]
+    reagents:
+      rift_fibre_III: 256
+      ember_powder_III: 128
+      shadow_ash_III: 64
+    duration_hours: 336
+    experiments_to_unlock: 5

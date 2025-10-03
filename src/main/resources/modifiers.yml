@@ -1,0 +1,488 @@
+# Pools per category with tiers and ranges
+modifiers:
+  WEAPON:
+    void_rend:
+      weight: 10
+      tiers:
+        1: { type: DAMAGE_PCT, min: 1.0, max: 3.0, format: "+{v}% Damage" }
+        2: { min: 2.0, max: 5.0 }
+        3: { min: 3.0, max: 7.0 }
+    bloodsiphon:
+      weight: 10
+      tiers:
+        1: { type: LIFESTEAL_PCT, min: 0.5, max: 1.5, format: "+{v}% Lifesteal" }
+        2: { min: 1.0, max: 2.5 }
+        3: { min: 1.5, max: 3.5 }
+    rift_pierce:
+      weight: 9
+      tiers:
+        1: { type: ARMOR_PEN_PCT, min: 2.0, max: 4.0 }
+        2: { min: 4.0, max: 7.0 }
+        3: { min: 6.0, max: 10.0 }
+    chrono_edge:
+      weight: 8
+      tiers:
+        1: { type: ATTACK_SPEED_PCT, min: 2.0, max: 4.0 }
+        2: { min: 4.0, max: 7.0 }
+        3: { min: 6.0, max: 10.0 }
+    severing_hex:
+      weight: 7
+      tiers:
+        1: { type: HEALING_DEBUFF_PCT, min: 20.0, max: 30.0 }
+        2: { min: 30.0, max: 40.0 }
+        3: { min: 40.0, max: 50.0 }
+    echo_slash:
+      weight: 8
+      tiers:
+        1: { type: ECHO_CHANCE_PCT, min: 5.0, max: 8.0 }
+        2: { min: 8.0, max: 12.0 }
+        3: { min: 12.0, max: 16.0 }
+    frostbrand:
+      weight: 8
+      tiers:
+        1: { type: SLOW_CHANCE_PCT, min: 15.0, max: 25.0 }
+        2: { min: 25.0, max: 35.0 }
+        3: { min: 35.0, max: 45.0 }
+    emberbrand:
+      weight: 8
+      tiers:
+        1: { type: BURN_DOT, min: 2.0, max: 4.0 }
+        2: { min: 3.0, max: 5.0 }
+        3: { min: 4.0, max: 6.0 }
+    soul_harvester:
+      weight: 7
+      tiers:
+        1: { type: DMG_VS_ELITES_PCT, min: 2.0, max: 4.0 }
+        2: { min: 4.0, max: 8.0 }
+        3: { min: 8.0, max: 12.0 }
+    cold_focus:
+      weight: 6
+      tiers:
+        1: { type: CRIT_DMG_PCT, min: 4.0, max: 7.0 }
+        2: { min: 7.0, max: 11.0 }
+        3: { min: 11.0, max: 15.0 }
+    stormlash:
+      weight: 5
+      tiers:
+        1: { type: CHAIN_LIGHTNING_CHANCE, min: 3.0, max: 5.0 }
+        2: { min: 5.0, max: 7.0 }
+        3: { min: 7.0, max: 10.0 }
+  ARMOR_HELM:
+    clairvoyance:
+      weight: 12
+      tiers:
+        1: { type: CRIT_CHANCE_PCT, min: 1.0, max: 2.0, format: "+{v}% Crit Chance" }
+        2: { min: 2.0, max: 3.0 }
+        3: { min: 3.0, max: 5.0 }
+    lucidity:
+      weight: 6
+      tiers:
+        1: { type: CDR_PCT, min: 1.0, max: 2.0, format: "+{v}% Cooldown Reduction" }
+        2: { min: 2.0, max: 3.0 }
+        3: { min: 3.0, max: 4.0 }
+    warding_thought:
+      weight: 8
+      tiers:
+        1: { type: RANGED_DR_PCT, min: 2.0, max: 3.0 }
+        2: { min: 3.0, max: 5.0 }
+        3: { min: 5.0, max: 7.0 }
+    battle_instinct:
+      weight: 7
+      tiers:
+        1: { type: FIRST_HIT_DMG_PCT, min: 2.0, max: 3.0 }
+        2: { min: 3.0, max: 5.0 }
+        3: { min: 5.0, max: 7.0 }
+  ARMOR_CHEST:
+    abyssal_carapace:
+      weight: 10
+      tiers:
+        1: { type: DR_PCT, min: 1.0, max: 2.5 }
+        2: { min: 2.5, max: 4.0 }
+        3: { min: 4.0, max: 6.0 }
+    stoic_guard:
+      weight: 10
+      tiers:
+        1: { type: FLAT_DMG_REDUCE, min: 10.0, max: 20.0 }
+        2: { min: 20.0, max: 30.0 }
+        3: { min: 30.0, max: 40.0 }
+    battle_hardened:
+      weight: 8
+      tiers:
+        1: { type: LOW_HP_DR_PCT, min: 3.0, max: 5.0 }
+        2: { min: 5.0, max: 8.0 }
+        3: { min: 8.0, max: 12.0 }
+    purge_skin:
+      weight: 7
+      tiers:
+        1: { type: CLEANSE_CHANCE_PCT, min: 3.0, max: 5.0 }
+        2: { min: 5.0, max: 8.0 }
+        3: { min: 8.0, max: 12.0 }
+    iron_will:
+      weight: 10
+      tiers:
+        1: { type: MAX_HEALTH_PCT, min: 2.0, max: 3.0 }
+        2: { min: 3.0, max: 5.0 }
+        3: { min: 5.0, max: 7.0 }
+  ARMOR_LEGS:
+    striders_pace:
+      weight: 10
+      tiers:
+        1: { type: MOVE_SPEED_PCT, min: 2.0, max: 3.0 }
+        2: { min: 4.0, max: 6.0 }
+        3: { min: 6.0, max: 9.0 }
+    battle_runner:
+      weight: 9
+      tiers:
+        1: { type: KILL_SPEED_PCT, min: 8.0, max: 12.0 }
+        2: { min: 12.0, max: 16.0 }
+        3: { min: 16.0, max: 22.0 }
+  ARMOR_BOOTS:
+    shadowstep:
+      weight: 10
+      tiers:
+        1: { type: EVADE_CHANCE_PCT, min: 2.0, max: 3.0 }
+        2: { min: 4.0, max: 6.0 }
+        3: { min: 6.0, max: 9.0 }
+    trailblazer:
+      weight: 9
+      tiers:
+        1: { type: OOC_SPEED_PCT, min: 5.0, max: 8.0 }
+        2: { min: 8.0, max: 12.0 }
+        3: { min: 12.0, max: 18.0 }
+    ember_tracks:
+      weight: 7
+      tiers:
+        1: { type: FIRE_TRAIL_CHANCE_PCT, min: 3.0, max: 5.0 }
+        2: { min: 5.0, max: 8.0 }
+        3: { min: 8.0, max: 12.0 }
+    shock_absorb:
+      weight: 7
+      tiers:
+        1: { type: STOMP_DMG, min: 200.0, max: 300.0 }
+        2: { min: 300.0, max: 500.0 }
+        3: { min: 500.0, max: 700.0 }
+  ACCESSORY_CLOAK:
+    windveil:
+      weight: 9
+      tiers:
+        1: { type: PROJECTILE_DODGE_PCT, min: 3.0, max: 5.0 }
+        2: { min: 5.0, max: 8.0 }
+        3: { min: 8.0, max: 12.0 }
+    nightglide:
+      weight: 8
+      tiers:
+        1: { type: OOC_SPEED_PCT, min: 5.0, max: 8.0 }
+        2: { min: 8.0, max: 12.0 }
+        3: { min: 12.0, max: 18.0 }
+    shadowmeld:
+      weight: 8
+      tiers:
+        1: { type: AGGRO_RADIUS_REDUCE_PCT, min: 10.0, max: 15.0 }
+        2: { min: 15.0, max: 25.0 }
+        3: { min: 25.0, max: 35.0 }
+    smoke_screen:
+      weight: 7
+      tiers:
+        1: { type: DECOY_CHANCE_PCT, min: 3.0, max: 5.0 }
+        2: { min: 5.0, max: 8.0 }
+        3: { min: 8.0, max: 12.0 }
+    null_drape:
+      weight: 8
+      tiers:
+        1: { type: PROJECTILE_DR_PCT, min: 3.0, max: 5.0 }
+        2: { min: 5.0, max: 8.0 }
+        3: { min: 8.0, max: 12.0 }
+    pace_keeper:
+      weight: 8
+      tiers:
+        1: { type: KEEP_SPRINT_CHANCE_PCT, min: 20.0, max: 30.0 }
+        2: { min: 30.0, max: 45.0 }
+        3: { min: 45.0, max: 60.0 }
+  ACCESSORY_RING1:
+    prosperity:
+      weight: 10
+      tiers:
+        1: { type: LUCK_ADD, min: 0.1, max: 0.3, format: "+{v} Luck" }
+        2: { min: 0.2, max: 0.6 }
+        3: { min: 0.4, max: 1.0 }
+    leech_amp:
+      weight: 9
+      tiers:
+        1: { type: LIFESTEAL_BOOST_PCT, min: 5.0, max: 10.0 }
+        2: { min: 10.0, max: 18.0 }
+        3: { min: 18.0, max: 25.0 }
+    quick_hands:
+      weight: 9
+      tiers:
+        1: { type: ATTACK_SPEED_PCT, min: 1.0, max: 3.0 }
+        2: { min: 3.0, max: 5.0 }
+        3: { min: 5.0, max: 7.0 }
+    hunter_mark:
+      weight: 8
+      tiers:
+        1: { type: MARK_CHANCE_PCT, min: 10.0, max: 15.0 }
+        2: { min: 15.0, max: 25.0 }
+        3: { min: 25.0, max: 35.0 }
+    glacial_aura:
+      weight: 7
+      tiers:
+        1: { type: SLOW_AURA_PCT, min: 5.0, max: 8.0 }
+        2: { min: 8.0, max: 12.0 }
+        3: { min: 12.0, max: 16.0 }
+    puncturing:
+      weight: 7
+      tiers:
+        1: { type: ARMOR_PEN_FLAT, min: 1.0, max: 2.0 }
+        2: { min: 2.0, max: 3.0 }
+        3: { min: 3.0, max: 4.0 }
+    bane_of_beasts:
+      weight: 7
+      tiers:
+        1: { type: DMG_VS_MOBS_PCT, min: 2.0, max: 4.0 }
+        2: { min: 4.0, max: 7.0 }
+        3: { min: 7.0, max: 10.0 }
+  ACCESSORY_RING2:
+    leech_amp:
+      weight: 9
+      tiers:
+        1: { type: LIFESTEAL_BOOST_PCT, min: 5.0, max: 10.0 }
+        2: { min: 10.0, max: 18.0 }
+        3: { min: 18.0, max: 25.0 }
+    quick_hands:
+      weight: 9
+      tiers:
+        1: { type: ATTACK_SPEED_PCT, min: 1.0, max: 3.0 }
+        2: { min: 3.0, max: 5.0 }
+        3: { min: 5.0, max: 7.0 }
+    hunter_mark:
+      weight: 8
+      tiers:
+        1: { type: MARK_CHANCE_PCT, min: 10.0, max: 15.0 }
+        2: { min: 15.0, max: 25.0 }
+        3: { min: 25.0, max: 35.0 }
+    glacial_aura:
+      weight: 7
+      tiers:
+        1: { type: SLOW_AURA_PCT, min: 5.0, max: 8.0 }
+        2: { min: 8.0, max: 12.0 }
+        3: { min: 12.0, max: 16.0 }
+    puncturing:
+      weight: 7
+      tiers:
+        1: { type: ARMOR_PEN_FLAT, min: 1.0, max: 2.0 }
+        2: { min: 2.0, max: 3.0 }
+        3: { min: 3.0, max: 4.0 }
+    bane_of_beasts:
+      weight: 7
+      tiers:
+        1: { type: DMG_VS_MOBS_PCT, min: 2.0, max: 4.0 }
+        2: { min: 4.0, max: 7.0 }
+        3: { min: 7.0, max: 10.0 }
+  ACCESSORY_SHIELD:
+    bastion:
+      weight: 10
+      tiers:
+        1: { type: BLOCK_CHANCE_PCT, min: 5.0, max: 8.0 }
+        2: { min: 8.0, max: 12.0 }
+        3: { min: 12.0, max: 18.0 }
+    riposte:
+      weight: 9
+      tiers:
+        1: { type: RETURN_DMG_PCT, min: 8.0, max: 12.0 }
+        2: { min: 12.0, max: 18.0 }
+        3: { min: 18.0, max: 25.0 }
+    turtle_shell:
+      weight: 9
+      tiers:
+        1: { type: DR_WHILE_BLOCKING_PCT, min: 6.0, max: 9.0 }
+        2: { min: 9.0, max: 13.0 }
+        3: { min: 13.0, max: 18.0 }
+    brace_up:
+      weight: 8
+      tiers:
+        1: { type: SPEED_AFTER_BLOCK_PCT, min: 8.0, max: 12.0 }
+        2: { min: 12.0, max: 18.0 }
+        3: { min: 18.0, max: 25.0 }
+    shield_bash:
+      weight: 8
+      tiers:
+        1: { type: BLOCK_STUN_CHANCE_PCT, min: 5.0, max: 7.0 }
+        2: { min: 7.0, max: 10.0 }
+        3: { min: 10.0, max: 12.0 }
+    bulwark_flow:
+      weight: 8
+      tiers:
+        1: { type: HEAL_AFTER_BLOCK, min: 5.0, max: 10.0 }
+        2: { min: 10.0, max: 15.0 }
+        3: { min: 15.0, max: 20.0 }
+    counter_edge:
+      weight: 8
+      tiers:
+        1: { type: NEXT_ATTACK_DMG_PCT, min: 5.0, max: 8.0 }
+        2: { min: 8.0, max: 12.0 }
+        3: { min: 12.0, max: 18.0 }
+  ACCESSORY_NECKLACE:
+    arcane_attunement:
+      weight: 9
+      tiers:
+        1: { type: CDR_PCT, min: 2.0, max: 4.0 }
+        2: { min: 4.0, max: 7.0 }
+        3: { min: 7.0, max: 10.0 }
+    purity_seal:
+      weight: 8
+      tiers:
+        1: { type: CURSE_RESIST_PCT, min: 15.0, max: 25.0 }
+        2: { min: 25.0, max: 40.0 }
+        3: { min: 40.0, max: 60.0 }
+    harmonize:
+      weight: 7
+      tiers:
+        1: { type: PARTY_BUFF_RADIUS_PCT, min: 10.0, max: 15.0 }
+        2: { min: 15.0, max: 25.0 }
+        3: { min: 25.0, max: 35.0 }
+  ACCESSORY_ADORNMENT:
+    hexguard:
+      weight: 8
+      tiers:
+        1: { type: NEG_EFFECT_DURATION_REDUCE_PCT, min: 10.0, max: 20.0 }
+        2: { min: 20.0, max: 35.0 }
+        3: { min: 35.0, max: 50.0 }
+    ritual_focus:
+      weight: 7
+      tiers:
+        1: { type: CHANNEL_SPEED_PCT, min: 5.0, max: 8.0 }
+        2: { min: 8.0, max: 12.0 }
+        3: { min: 12.0, max: 18.0 }
+    aether_surge:
+      weight: 7
+      tiers:
+        1: { type: PROJECTILE_SPEED_PCT, min: 5.0, max: 8.0 }
+        2: { min: 8.0, max: 12.0 }
+        3: { min: 12.0, max: 18.0 }
+    veilweaver:
+      weight: 7
+      tiers:
+        1: { type: CAMOUFLAGE_STRENGTH_PCT, min: 10.0, max: 15.0 }
+        2: { min: 15.0, max: 25.0 }
+        3: { min: 25.0, max: 35.0 }
+    oath_sigil:
+      weight: 6
+      tiers:
+        1: { type: AURA_POTENCY_PCT, min: 3.0, max: 5.0 }
+        2: { min: 5.0, max: 8.0 }
+        3: { min: 8.0, max: 12.0 }
+    spell_mender:
+      weight: 6
+      tiers:
+        1: { type: SELF_SHIELD_HP, min: 50.0, max: 75.0 }
+        2: { min: 75.0, max: 100.0 }
+        3: { min: 100.0, max: 150.0 }
+    backlash_net:
+      weight: 6
+      tiers:
+        1: { type: SILENCE_CHANCE_PCT, min: 3.0, max: 5.0 }
+        2: { min: 5.0, max: 7.0 }
+        3: { min: 7.0, max: 10.0 }
+    focus_anchor:
+      weight: 6
+      tiers:
+        1: { type: KNOCKBACK_TAKEN_REDUCE_PCT, min: 10.0, max: 20.0 }
+        2: { min: 20.0, max: 35.0 }
+        3: { min: 35.0, max: 50.0 }
+  ACCESSORY_BELT:
+    second_wind:
+      weight: 9
+      tiers:
+        1: { type: HEAL_ON_KILL, min: 5.0, max: 10.0 }
+        2: { min: 10.0, max: 15.0 }
+        3: { min: 15.0, max: 20.0 }
+    adrenal_surge:
+      weight: 8
+      tiers:
+        1: { type: LOW_HP_DMG_PCT, min: 3.0, max: 5.0 }
+        2: { min: 5.0, max: 8.0 }
+        3: { min: 8.0, max: 12.0 }
+    hexbuffer:
+      weight: 7
+      tiers:
+        1: { type: CURSE_RESIST_PCT, min: 10.0, max: 20.0 }
+        2: { min: 20.0, max: 35.0 }
+        3: { min: 35.0, max: 50.0 }
+    pack_mule:
+      weight: 6
+      tiers:
+        1: { type: PICKUP_RADIUS_PCT, min: 10.0, max: 20.0 }
+        2: { min: 20.0, max: 30.0 }
+        3: { min: 30.0, max: 40.0 }
+  ACCESSORY_GLOVES:
+    bloodletter:
+      weight: 8
+      tiers:
+        1: { type: BLEED_CHANCE_PCT, min: 5.0, max: 8.0 }
+        2: { min: 8.0, max: 12.0 }
+        3: { min: 12.0, max: 16.0 }
+    precision:
+      weight: 8
+      tiers:
+        1: { type: CRIT_CHANCE_PCT, min: 1.0, max: 2.0 }
+        2: { min: 2.0, max: 3.0 }
+        3: { min: 3.0, max: 5.0 }
+    chill_touch:
+      weight: 8
+      tiers:
+        1: { type: SLOW_CHANCE_PCT, min: 10.0, max: 15.0 }
+        2: { min: 15.0, max: 25.0 }
+        3: { min: 25.0, max: 35.0 }
+    steady_grip:
+      weight: 6
+      tiers:
+        1: { type: MINING_SPEED_PCT, min: 5.0, max: 8.0 }
+        2: { min: 8.0, max: 12.0 }
+        3: { min: 12.0, max: 18.0 }
+    nimble:
+      weight: 7
+      tiers:
+        1: { type: HASTE_LEVEL, min: 1.0, max: 1.0 }
+        2: { min: 2.0, max: 2.0 }
+        3: { min: 3.0, max: 3.0 }
+    vampiric_grasp:
+      weight: 7
+      tiers:
+        1: { type: LIFESTEAL_ON_CRIT_PCT, min: 0.5, max: 1.0 }
+        2: { min: 1.0, max: 1.8 }
+        3: { min: 1.8, max: 2.5 }
+    combo_artist:
+      weight: 7
+      tiers:
+        1: { type: STACKING_DMG_PER_HIT_PCT, min: 0.5, max: 1.0 }
+        2: { min: 1.0, max: 1.5 }
+        3: { min: 1.5, max: 2.0 }
+    sandman:
+      weight: 6
+      tiers:
+        1: { type: SLEEP_CHANCE_PCT, min: 3.0, max: 5.0 }
+        2: { min: 5.0, max: 7.0 }
+        3: { min: 7.0, max: 10.0 }
+    harvesters_touch:
+      weight: 6
+      tiers:
+        1: { type: LUCK_ADD, min: 1.0, max: 4.0 }
+        2: { min: 3.0, max: 6.0 }
+        3: { min: 7.0, max: 9.0 }
+wildcards:
+  WILDCARD_ACCESSORY:
+    spellward:
+      weight: 8
+      tiers:
+        1: { type: MAGIC_DR_PCT, min: 2, max: 3 }
+        2: { min: 3, max: 5 }
+        3: { min: 5, max: 7 }
+
+roll_rules:
+  choice_count: 2
+  ensure_distinct: true
+  allow_wildcards: true
+  wildcard_chance_by_tier:
+    1: 0.10
+    2: 0.15
+    3: 0.20

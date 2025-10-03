@@ -1,0 +1,21 @@
+name: ScientistPlugin
+version: '1.0.0'
+main: pl.yourserver.scientistPlugin.ScientistPlugin
+api-version: '1.20'
+authors: [ "YourServer" ]
+website: ""
+softdepend: [ MythicMobs, IngredientPouchPlugin, MyExperiencePlugin, TrinketsPlugin, MyCraftingPlugin2 ]
+commands:
+  scientist:
+    description: Open Scientist main GUI
+    usage: /<command>
+    aliases: [ sci, lab ]
+    permission: scientist.use
+    permission-message: "&cYou don't have permission."
+permissions:
+  scientist.use:
+    description: Use Scientist features
+    default: true
+  scientist.admin:
+    description: Admin commands for Scientist
+    default: op

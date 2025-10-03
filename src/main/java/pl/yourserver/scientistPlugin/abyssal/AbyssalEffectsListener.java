@@ -76,12 +76,17 @@ public class AbyssalEffectsListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onHit(EntityDamageByEntityEvent e) {
-        Player attacker = null;
+        Player attacker;
         if (e.getDamager() instanceof Player) {
             attacker = (Player) e.getDamager();
         } else if (e.getDamager() instanceof Projectile) {
             Projectile proj = (Projectile) e.getDamager();
             if (proj.getShooter() instanceof Player) attacker = (Player) proj.getShooter();
+            else {
+                attacker = null;
+            }
+        } else {
+            attacker = null;
         }
         if (attacker == null) return;
         if (!(e.getEntity() instanceof LivingEntity target)) return;

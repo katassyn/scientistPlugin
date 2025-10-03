@@ -30,7 +30,6 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.potion.PotionEffectType;
-import org.bukkit.potion.PotionEffectTypeCategory;
 import pl.yourserver.scientistPlugin.ScientistPlugin;
 
 import java.util.*;
@@ -990,9 +989,20 @@ public class AbyssalEffectsListener implements Listener {
     private boolean isNegativeEffect(PotionEffectType type) {
         if (type == null) return false;
         try {
-            return type.getEffectCategory() == PotionEffectTypeCategory.HARMFUL;
-        } catch (Throwable ignored) {
-            return false;
-        }
+            Object category = type.getEffectCategory();
+            if (category == null) return false;
+
+            // Modern Bukkit API (PotionEffectType.Category)
+            if (category.getClass().getName().equals("org.bukkit.potion.PotionEffectType$Category")) {
+                return category == PotionEffectType.Category.HARMFUL;
+            }
+
+            // Legacy API (PotionEffectTypeCategory)
+            if (category.getClass().getName().equals("org.bukkit.potion.PotionEffectTypeCategory")) {
+                Object harmful = category.getClass().getField("HARMFUL").get(null);
+                return category == harmful;
+            }
+        } catch (Throwable ignored) { }
+        return false;
     }
 }

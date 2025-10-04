@@ -6,6 +6,9 @@ main:
     recipe_slot: 13
     abyssal_slot: 15
     help_slot: 26
+  background:
+    material: BLACK_STAINED_GLASS_PANE
+    name: "&r "
   icons:
     research: { material: BREWING_STAND, name: "&aResearch Lab" }
     recipe: { material: BOOK, name: "&eRecipe Book" }
@@ -17,9 +20,14 @@ research:
   size: 45
   layout:
     start_button: 40
+    claim_button: 41
     input_slots: [ 10, 11, 12, 19, 20, 21, 28, 29, 30 ]
+  background:
+    material: GRAY_STAINED_GLASS_PANE
+    name: "&r "
   icons:
     start: { material: LIME_DYE, name: "&aStart Experiment" }
+    claim: { material: CHEST, name: "&aClaim Finished" }
 
 recipes:
   title: "Recipe Book"
@@ -27,6 +35,9 @@ recipes:
   layout:
     next: 53
     prev: 45
+  background:
+    material: PURPLE_STAINED_GLASS_PANE
+    name: "&r "
   icons:
     next: { material: ARROW, name: "&aNext" }
     prev: { material: ARROW, name: "&aPrev" }
@@ -41,6 +52,9 @@ abyssal:
     select_a: 30
     select_b: 32
     reject: 40
+  background:
+    material: PURPLE_STAINED_GLASS_PANE
+    name: "&r "
   icons:
     roll: { material: ENDER_EYE, name: "&dRoll" }
     a: { material: GREEN_DYE, name: "&aSelect A" }
@@ -53,6 +67,9 @@ confirm:
   layout:
     yes: 11
     no: 15
+  background:
+    material: BLACK_STAINED_GLASS_PANE
+    name: "&r "
   icons:
     yes: { material: LIME_WOOL, name: "&aConfirm" }
     no: { material: RED_WOOL, name: "&cCancel" }

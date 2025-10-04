@@ -6,10 +6,10 @@ authors: [ "YourServer" ]
 website: ""
 softdepend: [ MythicMobs, IngredientPouchPlugin, MyExperiencePlugin, TrinketsPlugin, MyCraftingPlugin2 ]
 commands:
-  scientist:
+  scientist_gui:
     description: Open Scientist main GUI
     usage: /<command>
-    aliases: [ sci, lab ]
+    aliases: [ scientist, sci, lab ]
     permission: scientist.use
     permission-message: "&cYou don't have permission."
 permissions:

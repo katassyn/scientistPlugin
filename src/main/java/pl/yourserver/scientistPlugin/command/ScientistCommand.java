@@ -1,28 +1,25 @@
 package pl.yourserver.scientistPlugin.command;
 
-import net.kyori.adventure.text.Component;
-import org.bukkit.Bukkit;
-import org.bukkit.Material;
-import org.bukkit.NamespacedKey;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
 import pl.yourserver.scientistPlugin.ScientistPlugin;
+import pl.yourserver.scientistPlugin.item.ItemService;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 public class ScientistCommand implements CommandExecutor, TabCompleter {
     private final ScientistPlugin plugin;
+    private final ItemService itemService;
 
-    public ScientistCommand(ScientistPlugin plugin) {
+    public ScientistCommand(ScientistPlugin plugin, ItemService itemService) {
         this.plugin = plugin;
+        this.itemService = itemService;
     }
 
     @Override
@@ -30,8 +27,7 @@ public class ScientistCommand implements CommandExecutor, TabCompleter {
         FileConfiguration msg = plugin.getConfigManager().messages();
         if (args.length == 0) {
             if (!(sender instanceof Player p)) {
-                String text = msg.getString("not_player", "&cThis command is only for players.");
-                sender.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(text));
+                sendMessage(sender, "not_player", "&cThis command is only for players.");
                 return true;
             }
             plugin.getGuiManager().openMain(p);
@@ -42,42 +38,72 @@ public class ScientistCommand implements CommandExecutor, TabCompleter {
         switch (sub) {
             case "reload" -> {
                 if (!sender.hasPermission("scientist.admin")) {
-                    String text = msg.getString("no_permission", "&cYou don't have permission.");
-                    sender.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(text));
+                    sendMessage(sender, "no_permission", "&cYou don't have permission.");
                     return true;
                 }
                 plugin.getConfigManager().reloadAll();
-                String text = msg.getString("reloaded", "&aScientist configs reloaded.");
-                sender.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(text));
+                sendMessage(sender, "reloaded", "&aScientist configs reloaded.");
+            }
+            case "progress" -> {
+                if (!(sender instanceof Player p)) {
+                    sendMessage(sender, "not_player", "&cThis command is only for players.");
+                    return true;
+                }
+                plugin.getResearchService().sendProgress(p);
+            }
+            case "give" -> {
+                if (!sender.hasPermission("scientist.admin")) {
+                    sendMessage(sender, "no_permission", "&cYou don't have permission.");
+                    return true;
+                }
+                if (args.length < 2) {
+                    sendMessage(sender, "give_usage", "&cUsage: /scientist give <key> [amount]");
+                    return true;
+                }
+                if (!(sender instanceof Player p)) {
+                    sendMessage(sender, "not_player", "&cThis command is only for players.");
+                    return true;
+                }
+                String key = args[1];
+                int amount = 1;
+                if (args.length >= 3) {
+                    try { amount = Integer.parseInt(args[2]); } catch (NumberFormatException ignored) {}
+                }
+                var itemOpt = itemService.createItem(key, amount);
+                if (itemOpt.isEmpty()) {
+                    String prefix = plugin.getConfigManager().messages().getString("prefix", "");
+                    String template = plugin.getConfigManager().messages().getString("invalid_item_key", "&cUnknown item key: {key}");
+                    sender.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(prefix + template.replace("{key}", key)));
+                    return true;
+                }
+                java.util.Map<Integer, ItemStack> leftover = p.getInventory().addItem(itemOpt.get());
+                leftover.values().forEach(it -> p.getWorld().dropItemNaturally(p.getLocation(), it));
+                String template = msg.getString("given", "&aGiven &e{amount}&a x &e{key}&a.");
+                template = template.replace("{key}", key).replace("{amount}", String.valueOf(amount));
+                sender.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(msg.getString("prefix", "") + template));
             }
             default -> {
-                String text = msg.getString("unknown_subcommand", "&cUnknown subcommand.");
-                sender.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(text));
+                sendMessage(sender, "unknown_subcommand", "&cUnknown subcommand.");
             }
         }
 
         return true;
     }
 
-    private ItemStack createPlaceholderItem(String key, int amount) {
-        // Placeholder vanilla item if external item systems are not hooked.
-        Material mat = Material.PAPER;
-        if (key.toLowerCase(Locale.ROOT).contains("bone")) mat = Material.ALLIUM; // flower icon
-        ItemStack it = new ItemStack(mat, Math.max(1, amount));
-        ItemMeta meta = it.getItemMeta();
-        meta.displayName(Component.text(key));
-        meta.addItemFlags(ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_UNBREAKABLE);
-        it.setItemMeta(meta);
-        return it;
-    }
-
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            return Arrays.asList("reload").stream()
+            return Arrays.asList("reload", "give", "progress").stream()
                     .filter(s -> s.startsWith(args[0].toLowerCase(Locale.ROOT)))
                     .collect(Collectors.toList());
         }
         return Collections.emptyList();
+    }
+
+    private void sendMessage(CommandSender sender, String path, String def) {
+        String prefix = plugin.getConfigManager().messages().getString("prefix", "");
+        String text = plugin.getConfigManager().messages().getString(path, def);
+        if (text == null) return;
+        sender.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(prefix + text));
     }
 }

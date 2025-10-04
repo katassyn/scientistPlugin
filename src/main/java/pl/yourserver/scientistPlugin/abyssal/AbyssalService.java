@@ -16,6 +16,7 @@ import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import pl.yourserver.scientistPlugin.ScientistPlugin;
 import pl.yourserver.scientistPlugin.gui.GuiManager;
+import pl.yourserver.scientistPlugin.item.ItemService;
 import pl.yourserver.scientistPlugin.model.SciCategory;
 
 import java.security.SecureRandom;
@@ -28,10 +29,12 @@ import java.util.*;
 public class AbyssalService {
     private final ScientistPlugin plugin;
     private final NamespacedKey pdcKey;
+    private final ItemService itemService;
     private final SecureRandom rng = new SecureRandom();
 
-    public AbyssalService(ScientistPlugin plugin) {
+    public AbyssalService(ScientistPlugin plugin, ItemService itemService) {
         this.plugin = plugin;
+        this.itemService = itemService;
         this.pdcKey = new NamespacedKey(plugin, "abyssal");
     }
 
@@ -51,24 +54,22 @@ public class AbyssalService {
         ItemStack target = inv.getItem(targetSlot);
         ItemStack bone = inv.getItem(boneSlot);
         if (target == null || target.getType().isAir()) {
-            String text = msg.getString("need_target", "Insert a valid target item.");
-            p.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(text));
+            sendMessage(p, "need_target", "&cInsert a valid target item.");
             return;
         }
         if (hasAbyssal(target)) {
-            String text = msg.getString("already_modified", "Item already has an Abyssal Modifier.");
-            p.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(text));
+            sendMessage(p, "already_modified", "&cThis item already has an Abyssal Modifier.");
             return;
         }
         if (bone == null || bone.getType().isAir()) {
-            String text = msg.getString("need_bone", "Insert a matching bone." );
-            p.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(text));
+            sendMessage(p, "need_bone", "&cInsert a matching bone.");
             return;
         }
-        SciCategory category = detectCategory(target, bone);
-        int tier = detectTier(bone);
+        String boneKey = itemService.readKey(bone).orElse(null);
+        SciCategory category = detectCategory(target, bone, boneKey);
+        int tier = boneKey != null ? itemService.tierFromBoneKey(boneKey) : detectTier(bone);
         if (category == null || tier == 0) {
-            p.sendMessage(msg.getString("need_bone"));
+            sendMessage(p, "need_bone", "&cInsert a valid Abyssal Bone matching the category/tier.");
             return;
         }
 
@@ -144,8 +145,7 @@ public class AbyssalService {
         st.invRef = inv;
         rollStates.put(p.getUniqueId(), st);
 
-        String readyText = msg.getString("roll_ready", "Rolled two options. Choose A or B, or Reject.");
-        p.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(readyText));
+        sendMessage(p, "roll_ready", "&aRolled two options. Choose A or B, or Reject.");
     }
 
     private void placeOptionIcon(Inventory inv, FileConfiguration gui, ConfigurationSection src, String key, int tier, double min, double max, int slot, String iconPath, String label, boolean isWildcard) {
@@ -202,8 +202,7 @@ public class AbyssalService {
         ItemStack bone = invRef.getItem(boneSlot);
         if (target == null || target.getType().isAir() || bone == null || bone.getType().isAir()) return;
         if (hasAbyssal(target)) {
-            String text = msg.getString("already_modified", "Item already has an Abyssal Modifier.");
-            p.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(text));
+            sendMessage(p, "already_modified", "&cThis item already has an Abyssal Modifier.");
             return;
         }
 
@@ -228,18 +227,20 @@ public class AbyssalService {
         if (rarityIdx >= 0) lore.add(rarityIdx, line); else lore.add(line);
         meta.lore(lore);
         target.setItemMeta(meta);
+        invRef.setItem(targetSlot, target);
 
         // Consume bone
         bone.setAmount(bone.getAmount() - 1);
+        invRef.setItem(boneSlot, bone.getAmount() <= 0 ? null : bone);
 
         // Log DB
         logApplication(p, target, st.category, key, st.tier, min, max, val);
 
         String success = msg.getString("applied_success", "Applied {name}");
-        success = success.replace("{name}", key)
+        success = success.replace("{name}", pl.yourserver.scientistPlugin.util.Texts.prettyKey(key))
                 .replace("{tier}", String.valueOf(st.tier))
                 .replace("{value}", String.format(Locale.US, "%.2f", val));
-        p.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(success));
+        sendMessage(p, null, success);
         p.closeInventory();
         rollStates.remove(p.getUniqueId());
     }
@@ -288,7 +289,10 @@ public class AbyssalService {
         Component tierC = Component.text(" ").append(Component.text(tierText).color(tierColor)).decoration(TextDecoration.ITALIC, false);
 
         // Name in bold purple (stylistic per spec example)
-        Component nameC = Component.text(" ").append(Component.text(key).color(NamedTextColor.DARK_PURPLE).decorate(TextDecoration.BOLD)).decoration(TextDecoration.ITALIC, false);
+        Component nameC = Component.text(" ").append(Component.text(pl.yourserver.scientistPlugin.util.Texts.prettyKey(key))
+                .color(NamedTextColor.DARK_PURPLE)
+                .decorate(TextDecoration.BOLD)
+                .decoration(TextDecoration.ITALIC, false));
 
         Component valC = Component.text(" ").append(Component.text("(" + valueString(key, value) + ")").color(NamedTextColor.GRAY)).decoration(TextDecoration.ITALIC, false);
         return prefix.append(tierC).append(nameC).append(valC);
@@ -317,7 +321,14 @@ public class AbyssalService {
         return keys.get(keys.size()-1);
     }
 
-    private SciCategory detectCategory(ItemStack target, ItemStack bone) {
+    private SciCategory detectCategory(ItemStack target, ItemStack bone, String boneKey) {
+        if (boneKey != null) {
+            Optional<SciCategory> fromKey = itemService.categoryFromBoneKey(boneKey);
+            if (fromKey.isPresent()) {
+                return fromKey.get();
+            }
+        }
+
         // Try deducing from target type first (weapons/armor)
         var t = target.getType().name();
         if (t.endsWith("_SWORD") || t.endsWith("_AXE") || t.equals("BOW") || t.equals("CROSSBOW") || t.equals("TRIDENT")) {
@@ -357,4 +368,11 @@ public class AbyssalService {
     }
 
     private double round2(double v) { return Math.round(v * 100.0) / 100.0; }
+
+    private void sendMessage(Player p, String path, String defaultText) {
+        String prefix = plugin.getConfigManager().messages().getString("prefix", "");
+        String text = path != null ? plugin.getConfigManager().messages().getString(path, defaultText) : defaultText;
+        if (text == null) return;
+        p.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(prefix + text));
+    }
 }

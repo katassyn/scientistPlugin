@@ -1,16 +1,13 @@
 package pl.yourserver.scientistPlugin.drop;
 
-import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
-import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDeathEvent;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
 import pl.yourserver.scientistPlugin.ScientistPlugin;
+import pl.yourserver.scientistPlugin.item.ItemService;
 
 import java.util.*;
 import java.util.regex.Pattern;
@@ -18,9 +15,11 @@ import java.util.regex.Pattern;
 public class MythicDropListener implements Listener {
     private final ScientistPlugin plugin;
     private final Random rng = new Random();
+    private final ItemService itemService;
 
-    public MythicDropListener(ScientistPlugin plugin) {
+    public MythicDropListener(ScientistPlugin plugin, ItemService itemService) {
         this.plugin = plugin;
+        this.itemService = itemService;
     }
 
     @EventHandler
@@ -61,9 +60,8 @@ public class MythicDropListener implements Listener {
         String family = families.get(rng.nextInt(families.size()));
         String key = family + "_" + tierTag;
 
-        ItemStack drop = createCanonicalItem(key);
         Location loc = event.getEntity().getLocation();
-        loc.getWorld().dropItemNaturally(loc, drop);
+        itemService.createItem(key).ifPresent(drop -> loc.getWorld().dropItemNaturally(loc, drop));
     }
 
     private String tierFromName(String n) {
@@ -88,28 +86,6 @@ public class MythicDropListener implements Listener {
             } catch (Exception ignored) {}
         }
         return out;
-    }
-
-    private ItemStack createCanonicalItem(String key) {
-        try {
-            var pm = plugin.getServer().getPluginManager();
-            var pouch = pm.getPlugin("IngredientPouchPlugin");
-            if (pouch != null) {
-                var getApi = pouch.getClass().getMethod("getAPI");
-                Object api = getApi.invoke(pouch);
-                if (api != null) {
-                    var getItem = api.getClass().getMethod("getItem", String.class);
-                    Object obj = getItem.invoke(api, key);
-                    if (obj instanceof ItemStack is && is.getType() != Material.AIR) return is;
-                }
-            }
-        } catch (Throwable ignored) {}
-        // fallback
-        ItemStack it = new ItemStack(Material.PAPER);
-        ItemMeta meta = it.getItemMeta();
-        meta.displayName(Component.text(key));
-        it.setItemMeta(meta);
-        return it;
     }
 
     private String getMythicInternalName(org.bukkit.entity.Entity ent) {

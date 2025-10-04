@@ -1,15 +1,11 @@
 package pl.yourserver.scientistPlugin.drop;
 
-import net.kyori.adventure.text.Component;
-import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.entity.EntityType;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDeathEvent;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
 import pl.yourserver.scientistPlugin.ScientistPlugin;
+import pl.yourserver.scientistPlugin.item.ItemService;
 
 import java.util.Locale;
 import java.util.Random;
@@ -17,9 +13,11 @@ import java.util.Random;
 public class DropListener implements Listener {
     private final ScientistPlugin plugin;
     private final Random rng = new Random();
+    private final ItemService itemService;
 
-    public DropListener(ScientistPlugin plugin) {
+    public DropListener(ScientistPlugin plugin, ItemService itemService) {
         this.plugin = plugin;
+        this.itemService = itemService;
     }
 
     @EventHandler
@@ -55,32 +53,8 @@ public class DropListener implements Listener {
         for (String key : sec.getKeys(false)) {
             double chance = sec.getDouble(key);
             if (debug || rng.nextDouble() <= chance) {
-                ItemStack drop = createCanonicalItem(key);
-                e.getDrops().add(drop);
+                itemService.createItem(key).ifPresent(e.getDrops()::add);
             }
         }
-    }
-
-    private ItemStack createCanonicalItem(String key) {
-        // Try IngredientPouchPlugin API: getAPI().getItem(String id)
-        try {
-            var pm = plugin.getServer().getPluginManager();
-            var pouch = pm.getPlugin("IngredientPouchPlugin");
-            if (pouch != null) {
-                var getApi = pouch.getClass().getMethod("getAPI");
-                Object api = getApi.invoke(pouch);
-                if (api != null) {
-                    var getItem = api.getClass().getMethod("getItem", String.class);
-                    Object obj = getItem.invoke(api, key);
-                    if (obj instanceof ItemStack is && is.getType() != Material.AIR) return is;
-                }
-            }
-        } catch (Throwable ignored) {}
-        // Fallback vanilla placeholder
-        ItemStack it = new ItemStack(Material.PAPER);
-        ItemMeta meta = it.getItemMeta();
-        meta.displayName(Component.text(key));
-        it.setItemMeta(meta);
-        return it;
     }
 }

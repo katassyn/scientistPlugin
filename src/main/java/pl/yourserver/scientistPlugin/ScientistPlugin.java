@@ -7,6 +7,7 @@ import pl.yourserver.scientistPlugin.config.ConfigManager;
 import pl.yourserver.scientistPlugin.db.Database;
 import pl.yourserver.scientistPlugin.drop.DropListener;
 import pl.yourserver.scientistPlugin.gui.GuiManager;
+import pl.yourserver.scientistPlugin.item.ItemService;
 import pl.yourserver.scientistPlugin.research.ResearchService;
 import pl.yourserver.scientistPlugin.abyssal.AbyssalService;
 
@@ -15,6 +16,7 @@ public final class ScientistPlugin extends JavaPlugin {
     private static ScientistPlugin instance;
     private ConfigManager configManager;
     private Database database;
+    private ItemService itemService;
     private ResearchService researchService;
     private AbyssalService abyssalService;
     private GuiManager guiManager;
@@ -33,24 +35,25 @@ public final class ScientistPlugin extends JavaPlugin {
         this.database = new Database(this);
         this.database.init();
 
-        this.researchService = new ResearchService(this);
-        this.abyssalService = new AbyssalService(this);
-        this.guiManager = new GuiManager(this);
+        this.itemService = new ItemService(this);
+        this.researchService = new ResearchService(this, itemService);
+        this.abyssalService = new AbyssalService(this, itemService);
+        this.guiManager = new GuiManager(this, itemService);
 
         // Commands
-        ScientistCommand cmd = new ScientistCommand(this);
-        getCommand("scientist").setExecutor(cmd);
-        getCommand("scientist").setTabCompleter(cmd);
+        ScientistCommand cmd = new ScientistCommand(this, itemService);
+        getCommand("scientist_gui").setExecutor(cmd);
+        getCommand("scientist_gui").setTabCompleter(cmd);
 
         // Listeners
         Bukkit.getPluginManager().registerEvents(guiManager, this);
-        Bukkit.getPluginManager().registerEvents(new DropListener(this), this);
+        Bukkit.getPluginManager().registerEvents(new DropListener(this, itemService), this);
         Bukkit.getPluginManager().registerEvents(new pl.yourserver.scientistPlugin.abyssal.AbyssalEffectsListener(this, abyssalService), this);
         Bukkit.getPluginManager().registerEvents(new pl.yourserver.scientistPlugin.abyssal.StatsSyncService(this), this);
         if (Bukkit.getPluginManager().getPlugin("MythicMobs") != null) {
             try {
                 Class.forName("io.lumine.mythic.bukkit.MythicBukkit");
-                Bukkit.getPluginManager().registerEvents(new pl.yourserver.scientistPlugin.drop.MythicDropListener(this), this);
+                Bukkit.getPluginManager().registerEvents(new pl.yourserver.scientistPlugin.drop.MythicDropListener(this, itemService), this);
             } catch (ClassNotFoundException ignored) {}
         }
 
@@ -69,4 +72,5 @@ public final class ScientistPlugin extends JavaPlugin {
     public ResearchService getResearchService() { return researchService; }
     public AbyssalService getAbyssalService() { return abyssalService; }
     public GuiManager getGuiManager() { return guiManager; }
+    public ItemService getItemService() { return itemService; }
 }

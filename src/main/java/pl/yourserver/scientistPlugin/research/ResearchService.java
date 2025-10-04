@@ -7,8 +7,8 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
 import pl.yourserver.scientistPlugin.ScientistPlugin;
+import pl.yourserver.scientistPlugin.item.ItemService;
 
 import java.sql.*;
 import java.time.Instant;
@@ -18,11 +18,13 @@ import java.util.*;
 
 public class ResearchService {
     private final ScientistPlugin plugin;
+    private final ItemService itemService;
     private final Gson gson = new Gson();
     private int taskId = -1;
 
-    public ResearchService(ScientistPlugin plugin) {
+    public ResearchService(ScientistPlugin plugin, ItemService itemService) {
         this.plugin = plugin;
+        this.itemService = itemService;
     }
 
     public void startReadyPoller() {
@@ -50,7 +52,7 @@ public class ResearchService {
         for (int s : slots) {
             ItemStack it = inv.getItem(s);
             if (it == null || it.getType().isAir()) continue;
-            String key = extractKeyFromItem(it);
+            String key = itemService.readKey(it).orElse(null);
             if (key == null) continue;
             counts.merge(key, it.getAmount(), Integer::sum);
         }
@@ -103,7 +105,7 @@ public class ResearchService {
             if (toRemove.isEmpty()) break;
             ItemStack it = inv.getItem(s);
             if (it == null || it.getType().isAir()) continue;
-            String k = extractKeyFromItem(it);
+            String k = itemService.readKey(it).orElse(null);
             if (k == null || !toRemove.containsKey(k)) continue;
             int need = toRemove.get(k);
             int take = Math.min(need, it.getAmount());
@@ -169,30 +171,15 @@ public class ResearchService {
         }
     }
 
-    private String extractKeyFromItem(ItemStack it) {
-        ItemMeta meta = it.getItemMeta();
-        if (meta == null) return null;
-        String dn = String.valueOf(meta.displayName());
-        // Expect exact key as display (for placeholder). Servers with MythicMobs can adapt mapping here.
-        if (dn != null && dn.length() > 0) {
-            // Component text format includes content=...; do a simple heuristic
-            int i = dn.indexOf("content=");
-            if (i >= 0) {
-                String sub = dn.substring(i + 8);
-                int end = sub.indexOf(",");
-                if (end > 0) return sub.substring(0, end).trim();
-            }
-        }
-        return null;
-    }
-
     public void sendProgress(Player p) {
         try (Connection c = plugin.getDatabase().getConnection();
              PreparedStatement ps = c.prepareStatement("SELECT recipe_key, status, UNIX_TIMESTAMP(end_at) end_ts FROM sci_experiment WHERE player_uuid = UNHEX(REPLACE(?,'-','')) ORDER BY id DESC LIMIT 10")) {
             ps.setString(1, p.getUniqueId().toString());
             try (ResultSet rs = ps.executeQuery()) {
                 boolean any = false;
-                p.sendMessage(plugin.getConfigManager().messages().getString("progress_header"));
+                String prefix = plugin.getConfigManager().messages().getString("prefix", "");
+                String header = plugin.getConfigManager().messages().getString("progress_header", "&eYour running experiments:");
+                p.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(prefix + header));
                 while (rs.next()) {
                     any = true;
                     String key = rs.getString("recipe_key");
@@ -200,9 +187,13 @@ public class ResearchService {
                     long endTs = rs.getLong("end_ts");
                     long now = Instant.now().getEpochSecond();
                     long remain = Math.max(0, endTs - now);
-                    p.sendMessage(" - " + key + " [" + status + "] " + (status.equals("RUNNING") ? (remain/60) + "m left" : "ready"));
+                    String line = " &7- &f" + key + " &7[" + status + "] " + ("RUNNING".equals(status) ? ((remain / 60) + "m left") : "ready");
+                    p.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(prefix + line));
                 }
-                if (!any) p.sendMessage(plugin.getConfigManager().messages().getString("no_running_experiments"));
+                if (!any) {
+                    String none = plugin.getConfigManager().messages().getString("no_running_experiments", "&7No running experiments.");
+                    p.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(prefix + none));
+                }
             }
         } catch (SQLException e) {
             e.printStackTrace();

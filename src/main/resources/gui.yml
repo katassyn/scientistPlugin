@@ -1,5 +1,5 @@
 main:
-  title: "Scientist Lab"
+  title: "&5Laboratorium Badawcze"
   size: 27
   layout:
     research_slot: 11
@@ -8,42 +8,123 @@ main:
     help_slot: 26
   background:
     material: BLACK_STAINED_GLASS_PANE
-    name: "&r "
+    name: ""
+  decor:
+    4:
+      material: NETHER_STAR
+      name: "&dScientist Hub"
+      lore:
+        - "&7Zbieraj reagenty z torby skladnikow."
+        - "&7Odblokuj receptury i wzmacniaj sprzet."
+    22:
+      material: LECTERN
+      name: "&fJak to dziala?"
+      lore:
+        - "&71. Umiesc reagenty w zakladce Badania."
+        - "&72. Uruchom eksperyment i poczekaj na wynik."
+        - "&73. Odbierz nagrode i odblokuj receptury."
   icons:
-    research: { material: BREWING_STAND, name: "&aResearch Lab" }
-    recipe: { material: BOOK, name: "&eRecipe Book" }
-    abyssal: { material: ENCHANTING_TABLE, name: "&5Abyssal Enchanting" }
-    help: { material: KNOWLEDGE_BOOK, name: "&7Help" }
+    research:
+      material: BREWING_STAND
+      name: "&aBadania"
+      lore:
+        - "&7Eksperymentuj z reagentami aby zdobywac postep."
+    recipe:
+      material: KNOWLEDGE_BOOK
+      name: "&eReceptury"
+      lore:
+        - "&7Podglad odblokowanych przepisow oraz wymagan."
+    abyssal:
+      material: ENCHANTING_TABLE
+      name: "&5Abyssal Enchanting"
+      lore:
+        - "&7Uzyj kosci Abyssu aby wzmocnic przedmioty."
+    help:
+      material: WRITABLE_BOOK
+      name: "&bSamouczek"
+      lore:
+        - "&7Kliknij aby otrzymac szczegolowy poradnik na czacie."
 
 research:
-  title: "Research Lab"
+  title: "&5Badania Reagentow"
   size: 45
   layout:
     start_button: 40
     claim_button: 41
     input_slots: [ 10, 11, 12, 19, 20, 21, 28, 29, 30 ]
   background:
-    material: GRAY_STAINED_GLASS_PANE
-    name: "&r "
+    material: BLACK_STAINED_GLASS_PANE
+    name: ""
+  decor:
+    4:
+      material: AMETHYST_SHARD
+      name: "&dStatus Laboratorium"
+      lore:
+        - "&7Umiesc reagenty z Ingredient Pouch w slotach ponizej."
+        - "&7Kazdy eksperyment trwa okreslony czas."
+    13:
+      material: CHEST
+      name: "&fOdbior wynikow"
+      lore:
+        - "&7Kliknij &aOdbierz&7, gdy eksperyment zakonczy sie pomyslnie."
+    31:
+      material: CLOCK
+      name: "&7Limity"
+      lore:
+        - "&7Pamietaj o limicie rownoleglych eksperymentow."
   icons:
-    start: { material: LIME_DYE, name: "&aStart Experiment" }
-    claim: { material: CHEST, name: "&aClaim Finished" }
+    start:
+      material: LIME_DYE
+      name: "&aRozpocznij eksperyment"
+      lore:
+        - "&7Zuzywa podane reagenty i uruchamia badanie."
+    claim:
+      material: CHEST
+      name: "&aOdbierz wyniki"
+      lore:
+        - "&7Zbierz nagrody i zwieksz postep receptury."
+    empty:
+      material: BARRIER
+      name: "&7Brak aktywnych eksperymentow"
+      lore:
+        - "&7Umiesc reagenty aby rozpoczac nowe badania."
 
 recipes:
-  title: "Recipe Book"
+  title: "&eKsiega Receptur"
   size: 54
   layout:
     next: 53
     prev: 45
   background:
-    material: PURPLE_STAINED_GLASS_PANE
-    name: "&r "
+    material: BLACK_STAINED_GLASS_PANE
+    name: ""
+  decor:
+    4:
+      material: BOOK
+      name: "&fPostep badan"
+      lore:
+        - "&7Zielony kolor oznacza recepture gotowa do uzycia."
+        - "&7Czerwony oznacza brak wymaganego postepu."
+    49:
+      material: HOPPER
+      name: "&7Poruszanie"
+      lore:
+        - "&fKliknij strzalki aby zmienic strone listy."
   icons:
-    next: { material: ARROW, name: "&aNext" }
-    prev: { material: ARROW, name: "&aPrev" }
+    next:
+      material: ARROW
+      name: "&aNastepna strona"
+    prev:
+      material: ARROW
+      name: "&aPoprzednia strona"
+    empty:
+      material: PAPER
+      name: "&7Brak receptur do wyswietlenia"
+      lore:
+        - "&7Wykonuj badania, by odblokowac nowe przepisy."
 
 abyssal:
-  title: "Abyssal Enchanting"
+  title: "&5Abyssal Enchanting"
   size: 45
   layout:
     target_slot: 20
@@ -53,24 +134,70 @@ abyssal:
     select_b: 32
     reject: 40
   background:
-    material: PURPLE_STAINED_GLASS_PANE
-    name: "&r "
+    material: BLACK_STAINED_GLASS_PANE
+    name: ""
+  decor:
+    2:
+      material: SMITHING_TABLE
+      name: "&fInstrukcja"
+      lore:
+        - "&7Lewy slot: przedmiot do wzmocnienia."
+        - "&7Prawy slot: kosc Abyssu odpowiedniej kategorii."
+    6:
+      material: WITHER_SKELETON_SKULL
+      name: "&dKosci Abyssu"
+      lore:
+        - "&7Tier kosci musi odpowiadac tierowi modyfikacji."
+    16:
+      material: EXPERIENCE_BOTTLE
+      name: "&7Wybor efektu"
+      lore:
+        - "&7Wybierz jedna z dwoch opcji lub odrzuc losowanie."
+    11:
+      material: ITEM_FRAME
+      name: "&fSlot na cel"
+      lore:
+        - "&7Umiesc tutaj przedmiot, ktory chcesz wzmocnic."
+    15:
+      material: ITEM_FRAME
+      name: "&fSlot na kosc"
+      lore:
+        - "&7Wloz pasujaca kosc Abyssu."
   icons:
-    roll: { material: ENDER_EYE, name: "&dRoll" }
-    a: { material: GREEN_DYE, name: "&aSelect A" }
-    b: { material: BLUE_DYE, name: "&9Select B" }
-    reject: { material: BARRIER, name: "&cReject" }
+    roll:
+      material: ENDER_EYE
+      name: "&dLosuj opcje"
+      lore:
+        - "&7Zuzywa kosc i proponuje dwie modyfikacje."
+    a:
+      material: LIME_DYE
+      name: "&aWybierz opcje A"
+    b:
+      material: LIGHT_BLUE_DYE
+      name: "&bWybierz opcje B"
+    reject:
+      material: BARRIER
+      name: "&cOdrzuc losowanie"
+      lore:
+        - "&7Zachowujesz kosc, ale tracisz aktualne opcje."
 
 confirm:
-  title: "Confirm Abyssal Application"
+  title: "&dPotwierdz modyfikacje"
   size: 27
   layout:
     yes: 11
     no: 15
   background:
     material: BLACK_STAINED_GLASS_PANE
-    name: "&r "
+    name: ""
   icons:
-    yes: { material: LIME_WOOL, name: "&aConfirm" }
-    no: { material: RED_WOOL, name: "&cCancel" }
-
+    yes:
+      material: LIME_WOOL
+      name: "&aPotwierdz"
+      lore:
+        - "&7Zapisz wybrana modyfikacje na przedmiocie."
+    no:
+      material: RED_WOOL
+      name: "&cAnuluj"
+      lore:
+        - "&7Wroc do wyboru opcji bez zmian."

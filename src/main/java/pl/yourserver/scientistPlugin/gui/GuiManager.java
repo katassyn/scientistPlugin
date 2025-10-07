@@ -24,6 +24,7 @@ public class GuiManager implements Listener {
     private final ScientistPlugin plugin;
     private final ItemService itemService;
     private final Map<UUID, String> openGui = new HashMap<>();
+    private final Map<UUID, Inventory> activeInventories = new HashMap<>();
     private final Map<UUID, RollState> rollStates = new HashMap<>();
     private final Map<UUID, Integer> pendingChoice = new HashMap<>();
     private final Map<UUID, Integer> recipePage = new HashMap<>();
@@ -32,6 +33,17 @@ public class GuiManager implements Listener {
     public GuiManager(ScientistPlugin plugin, ItemService itemService) {
         this.plugin = plugin;
         this.itemService = itemService;
+    }
+
+    private void presentInventory(Player player, String context, Inventory inventory) {
+        UUID id = player.getUniqueId();
+        activeInventories.put(id, inventory);
+        player.openInventory(inventory);
+        openGui.put(id, context);
+    }
+
+    private void presentInventoryLater(Player player, String context, Inventory inventory) {
+        Bukkit.getScheduler().runTask(plugin, () -> presentInventory(player, context, inventory));
     }
 
     public void openMain(Player p) {
@@ -59,8 +71,7 @@ public class GuiManager implements Listener {
         inv.setItem(abyssalSlot, configuredItem(icons.getConfigurationSection("abyssal"), "ENCHANTING_TABLE", "&5Abyssal Enchanting"));
         inv.setItem(helpSlot, configuredItem(icons.getConfigurationSection("help"), "KNOWLEDGE_BOOK", "&7Help"));
 
-        openGui.put(p.getUniqueId(), "main");
-        p.openInventory(inv);
+        presentInventory(p, "main", inv);
         sendMessage(p, "open_main", "&aOpening Scientist Lab...");
     }
 
@@ -108,8 +119,7 @@ public class GuiManager implements Listener {
             inv.setItem(slot, it);
         }
 
-        openGui.put(p.getUniqueId(), "research");
-        p.openInventory(inv);
+        presentInventory(p, "research", inv);
     }
 
     private int researchGridSlot(int index) {
@@ -177,9 +187,8 @@ public class GuiManager implements Listener {
             slotMap.put(slot, key);
             placed++;
         }
+        presentInventory(p, "recipes", inv);
         recipeSlotMap.put(p.getUniqueId(), slotMap);
-        openGui.put(p.getUniqueId(), "recipes");
-        p.openInventory(inv);
     }
 
     private int toGridSlot(int index) {
@@ -214,8 +223,7 @@ public class GuiManager implements Listener {
         inv.setItem(selectB, configuredItem(abyssSec.getConfigurationSection("icons.b"), "BLUE_DYE", "&9Select B"));
         inv.setItem(reject, configuredItem(abyssSec.getConfigurationSection("icons.reject"), "BARRIER", "&cReject"));
 
-        openGui.put(p.getUniqueId(), "abyssal");
-        p.openInventory(inv);
+        presentInventory(p, "abyssal", inv);
     }
 
     public void openConfirm(Player p) {
@@ -233,8 +241,7 @@ public class GuiManager implements Listener {
         applyBackground(inv, confirmSec, reserved);
         inv.setItem(yes, configuredItem(confirmSec.getConfigurationSection("icons.yes"), "LIME_WOOL", "&aConfirm"));
         inv.setItem(no, configuredItem(confirmSec.getConfigurationSection("icons.no"), "RED_WOOL", "&cCancel"));
-        openGui.put(p.getUniqueId(), "confirm");
-        p.openInventory(inv);
+        presentInventory(p, "confirm", inv);
     }
 
     private ItemStack configuredItem(ConfigurationSection sec, String fallbackMaterial, String fallbackName) {
@@ -260,12 +267,17 @@ public class GuiManager implements Listener {
     @EventHandler
     public void onClick(InventoryClickEvent e) {
         HumanEntity he = e.getWhoClicked();
-        String ctx = openGui.get(he.getUniqueId());
+        UUID id = he.getUniqueId();
+        Inventory top = e.getView().getTopInventory();
+        Inventory tracked = activeInventories.get(id);
+        if (tracked == null || !tracked.equals(top)) {
+            return;
+        }
+        String ctx = openGui.get(id);
         if (ctx == null) return;
         if (!(he instanceof Player p)) return;
         FileConfiguration gui = plugin.getConfigManager().gui();
 
-        Inventory top = e.getView().getTopInventory();
         boolean topClick = e.getClickedInventory() != null && e.getClickedInventory().equals(top);
         boolean cancel = topClick;
         int rawSlot = e.getRawSlot();
@@ -386,9 +398,14 @@ public class GuiManager implements Listener {
 
     @EventHandler
     public void onDrag(InventoryDragEvent e) {
-        String ctx = openGui.get(e.getWhoClicked().getUniqueId());
-        if (ctx == null) return;
+        UUID id = e.getWhoClicked().getUniqueId();
         Inventory top = e.getView().getTopInventory();
+        Inventory tracked = activeInventories.get(id);
+        if (tracked == null || !tracked.equals(top)) {
+            return;
+        }
+        String ctx = openGui.get(id);
+        if (ctx == null) return;
         int size = top.getSize();
         FileConfiguration gui = plugin.getConfigManager().gui();
         java.util.Set<Integer> allowed = new java.util.HashSet<>();
@@ -413,20 +430,58 @@ public class GuiManager implements Listener {
     @EventHandler
     public void onClose(InventoryCloseEvent e) {
         UUID id = e.getPlayer().getUniqueId();
+        Inventory tracked = activeInventories.get(id);
+        if (tracked == null || !tracked.equals(e.getInventory())) {
+            return;
+        }
+
+        activeInventories.remove(id);
         String ctx = openGui.remove(id);
-        rollStates.remove(id);
-        pendingChoice.remove(id);
-        recipeSlotMap.remove(id);
-        if (!(e.getPlayer() instanceof Player p) || ctx == null) return;
+        if (!(e.getPlayer() instanceof Player p)) {
+            rollStates.remove(id);
+            pendingChoice.remove(id);
+            recipeSlotMap.remove(id);
+            return;
+        }
+
         FileConfiguration gui = plugin.getConfigManager().gui();
+        if (ctx == null) {
+            rollStates.remove(id);
+            pendingChoice.remove(id);
+            recipeSlotMap.remove(id);
+            return;
+        }
+
+        if (ctx.equals("confirm")) {
+            Integer pending = pendingChoice.remove(id);
+            if (pending != null) {
+                RollState st = rollStates.get(id);
+                if (st != null && st.invRef != null) {
+                    presentInventoryLater(p, "abyssal", st.invRef);
+                }
+            }
+            return;
+        }
+
+        recipeSlotMap.remove(id);
+        pendingChoice.remove(id);
+
         if (ctx.equals("research")) {
             int[] slots = gui.getIntegerList("research.layout.input_slots").stream().mapToInt(i -> i).toArray();
             refundSlots(p, e.getInventory(), slots);
-        } else if (ctx.equals("abyssal")) {
+            rollStates.remove(id);
+            return;
+        }
+
+        if (ctx.equals("abyssal")) {
             ConfigurationSection layout = gui.getConfigurationSection("abyssal.layout");
             int[] slots = new int[]{ layout.getInt("target_slot", 20), layout.getInt("bone_slot", 24) };
             refundSlots(p, e.getInventory(), slots);
+            rollStates.remove(id);
+            return;
         }
+
+        rollStates.remove(id);
     }
 
     public static class RollState {

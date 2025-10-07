@@ -2,12 +2,15 @@ package pl.yourserver.scientistPlugin.item;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextDecoration;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.plugin.Plugin;
 import pl.yourserver.scientistPlugin.ScientistPlugin;
 import pl.yourserver.scientistPlugin.model.SciCategory;
 import pl.yourserver.scientistPlugin.util.Texts;
@@ -15,7 +18,6 @@ import pl.yourserver.scientistPlugin.util.Texts;
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-
 /**
  * Centralises interaction with external item providers (IngredientPouch, MythicMobs YAML) and
  * provides deterministic fallback items tagged with a persistent key so that other subsystems
@@ -26,10 +28,12 @@ public class ItemService {
     private final ScientistPlugin plugin;
     private final NamespacedKey mappingKey;
     private final Map<String, ItemStack> cache = new ConcurrentHashMap<>();
+    private final Plugin ingredientPlugin;
     private final Object ingredientApi;
     private final Method ingredientGetItemMethod;
     private final Object ingredientMappings;
     private final Method ingredientResolveKeyMethod;
+    private final Map<String, String> ingredientDisplayLookup;
     private final Object mythicItemManager;
     private final Method mythicGetItemStackMethod;
     private final Method mythicGetItemMethod;
@@ -39,10 +43,12 @@ public class ItemService {
     public ItemService(ScientistPlugin plugin) {
         this.plugin = plugin;
         this.mappingKey = new NamespacedKey(plugin, "scientist_item_key");
-        this.ingredientApi = resolveIngredientApi();
+        this.ingredientPlugin = plugin.getServer().getPluginManager().getPlugin("IngredientPouchPlugin");
+        this.ingredientApi = resolveIngredientApi(ingredientPlugin);
         this.ingredientGetItemMethod = findMethod(ingredientApi, "getItem", String.class);
         this.ingredientMappings = resolveIngredientMappings(ingredientApi);
         this.ingredientResolveKeyMethod = findMappingsResolver(ingredientMappings);
+        this.ingredientDisplayLookup = buildIngredientDisplayLookup(ingredientPlugin);
         this.mythicItemManager = resolveMythicItemManager();
         this.mythicGetItemStackMethod = findMethod(mythicItemManager, "getItemStack", String.class);
         this.mythicGetItemMethod = findMethod(mythicItemManager, "getItem", String.class);
@@ -187,15 +193,15 @@ public class ItemService {
         return 0;
     }
 
-    private Object resolveIngredientApi() {
+    private Object resolveIngredientApi(Plugin pouchPlugin) {
+        if (pouchPlugin == null) {
+            return null;
+        }
         try {
-            var pouch = plugin.getServer().getPluginManager().getPlugin("IngredientPouchPlugin");
-            if (pouch != null) {
-                Method getApi = pouch.getClass().getMethod("getAPI");
-                Object api = getApi.invoke(pouch);
-                if (api != null) {
-                    return api;
-                }
+            Method getApi = pouchPlugin.getClass().getMethod("getAPI");
+            Object api = getApi.invoke(pouchPlugin);
+            if (api != null) {
+                return api;
             }
         } catch (Throwable ignored) {
         }
@@ -212,6 +218,84 @@ public class ItemService {
         return null;
     }
 
+    private Map<String, String> buildIngredientDisplayLookup(Plugin pouchPlugin) {
+        if (pouchPlugin == null) {
+            return Collections.emptyMap();
+        }
+        try {
+            Method getItemManager = pouchPlugin.getClass().getMethod("getItemManager");
+            Object manager = getItemManager.invoke(pouchPlugin);
+            if (manager == null) {
+                return Collections.emptyMap();
+            }
+            Method getIds = findMethod(manager, "getItemIds");
+            Method getItem = findMethod(manager, "getItem", String.class);
+            if (getIds == null || getItem == null) {
+                return Collections.emptyMap();
+            }
+            Object idsObj = getIds.invoke(manager);
+            if (!(idsObj instanceof Collection<?> ids)) {
+                return Collections.emptyMap();
+            }
+            Map<String, String> lookup = new HashMap<>();
+            for (Object idObj : ids) {
+                String id = String.valueOf(idObj);
+                Object stackObj = getItem.invoke(manager, id);
+                if (stackObj instanceof ItemStack stack) {
+                    String normalized = normalizeDisplay(stack.getItemMeta());
+                    if (!normalized.isEmpty()) {
+                        lookup.putIfAbsent(normalized, id);
+                    }
+                }
+            }
+            return lookup;
+        } catch (Throwable ignored) {
+        }
+        return Collections.emptyMap();
+    }
+
+    private String normalizeDisplay(ItemMeta meta) {
+        if (meta == null) {
+            return "";
+        }
+        return normalizeDisplay(extractDisplay(meta));
+    }
+
+    private String normalizeDisplay(String display) {
+        if (display == null) {
+            return "";
+        }
+        String stripped = ChatColor.stripColor(display);
+        if (stripped == null) {
+            stripped = display;
+        }
+        stripped = stripped.trim();
+        if (stripped.isEmpty()) {
+            return "";
+        }
+        int multIndex = stripped.lastIndexOf(" x");
+        if (multIndex > 0) {
+            String suffix = stripped.substring(multIndex + 2).trim();
+            if (!suffix.isEmpty() && suffix.chars().allMatch(Character::isDigit)) {
+                stripped = stripped.substring(0, multIndex).trim();
+            }
+        }
+        return stripped.toLowerCase(Locale.ROOT);
+    }
+
+    private String extractDisplay(ItemMeta meta) {
+        if (meta == null) {
+            return "";
+        }
+        Component comp = meta.displayName();
+        if (comp != null) {
+            return PlainTextComponentSerializer.plainText().serialize(comp);
+        }
+        if (meta.hasDisplayName()) {
+            return meta.getDisplayName();
+        }
+        return "";
+    }
     private Method findMappingsResolver(Object mappings) {
         if (mappings == null) return null;
         for (Method m : mappings.getClass().getMethods()) {
@@ -367,18 +451,31 @@ public class ItemService {
     }
 
     private Optional<String> resolveIngredientKey(ItemStack item) {
-        if (ingredientMappings == null || ingredientResolveKeyMethod == null) {
+        if (item == null) {
             return Optional.empty();
         }
-        try {
-            Object res = ingredientResolveKeyMethod.invoke(ingredientMappings, item);
-            if (res instanceof Optional<?> opt) {
-                return opt.map(String::valueOf);
+        if (ingredientMappings != null && ingredientResolveKeyMethod != null) {
+            try {
+                Object res = ingredientResolveKeyMethod.invoke(ingredientMappings, item);
+                if (res instanceof Optional<?> opt) {
+                    Optional<String> mapped = opt.map(String::valueOf);
+                    if (mapped.isPresent()) {
+                        return mapped;
+                    }
+                } else if (res instanceof String str && !str.isEmpty()) {
+                    return Optional.of(str);
+                }
+            } catch (Throwable ignored) {
             }
-            if (res instanceof String str && !str.isEmpty()) {
-                return Optional.of(str);
+        }
+        if (ingredientDisplayLookup != null && !ingredientDisplayLookup.isEmpty()) {
+            String normalized = normalizeDisplay(item.getItemMeta());
+            if (!normalized.isEmpty()) {
+                String mapped = ingredientDisplayLookup.get(normalized);
+                if (mapped != null && !mapped.isEmpty()) {
+                    return Optional.of(mapped);
+                }
             }
-        } catch (Throwable ignored) {
         }
         return Optional.empty();
     }
@@ -421,4 +518,3 @@ public class ItemService {
         return Optional.empty();
     }
 }
-

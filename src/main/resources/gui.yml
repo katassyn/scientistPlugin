@@ -1,5 +1,5 @@
 main:
-  title: "&5Laboratorium Badawcze"
+  title: "&5Research Laboratory"
   size: 27
   layout:
     research_slot: 11
@@ -14,39 +14,39 @@ main:
       material: NETHER_STAR
       name: "&dScientist Hub"
       lore:
-        - "&7Zbieraj reagenty z torby skladnikow."
-        - "&7Odblokuj receptury i wzmacniaj sprzet."
+        - "&7Gather reagents from your ingredient pouch."
+        - "&7Unlock recipes and empower your gear."
     22:
       material: LECTERN
-      name: "&fJak to dziala?"
+      name: "&fHow It Works"
       lore:
-        - "&71. Umiesc reagenty w zakladce Badania."
-        - "&72. Uruchom eksperyment i poczekaj na wynik."
-        - "&73. Odbierz nagrode i odblokuj receptury."
+        - "&71. Place reagents in the Research tab."
+        - "&72. Start experiments and wait for completion."
+        - "&73. Claim rewards to unlock new recipes."
   icons:
     research:
       material: BREWING_STAND
-      name: "&aBadania"
+      name: "&aResearch"
       lore:
-        - "&7Eksperymentuj z reagentami aby zdobywac postep."
+        - "&7Experiment with reagents to gain progress."
     recipe:
       material: KNOWLEDGE_BOOK
-      name: "&eReceptury"
+      name: "&eRecipes"
       lore:
-        - "&7Podglad odblokowanych przepisow oraz wymagan."
+        - "&7Preview unlocked recipes and requirements."
     abyssal:
       material: ENCHANTING_TABLE
       name: "&5Abyssal Enchanting"
       lore:
-        - "&7Uzyj kosci Abyssu aby wzmocnic przedmioty."
+        - "&7Use Abyssal Bones to augment items."
     help:
       material: WRITABLE_BOOK
-      name: "&bSamouczek"
+      name: "&bTutorial"
       lore:
-        - "&7Kliknij aby otrzymac szczegolowy poradnik na czacie."
+        - "&7Click to receive a detailed guide in chat."
 
 research:
-  title: "&5Badania Reagentow"
+  title: "&5Reagent Research"
   size: 45
   layout:
     start_button: 40
@@ -58,39 +58,39 @@ research:
   decor:
     4:
       material: AMETHYST_SHARD
-      name: "&dStatus Laboratorium"
+      name: "&dLab Status"
       lore:
-        - "&7Umiesc reagenty z Ingredient Pouch w slotach ponizej."
-        - "&7Kazdy eksperyment trwa okreslony czas."
+        - "&7Place reagents from the Ingredient Pouch below."
+        - "&7Each experiment takes a fixed amount of time."
     13:
       material: CHEST
-      name: "&fOdbior wynikow"
+      name: "&fClaim Results"
       lore:
-        - "&7Kliknij &aOdbierz&7, gdy eksperyment zakonczy sie pomyslnie."
+        - "&7Press &aClaim&7 when an experiment finishes."
     31:
       material: CLOCK
-      name: "&7Limity"
+      name: "&7Limits"
       lore:
-        - "&7Pamietaj o limicie rownoleglych eksperymentow."
+        - "&7Remember the cap on concurrent experiments."
   icons:
     start:
       material: LIME_DYE
-      name: "&aRozpocznij eksperyment"
+      name: "&aStart Experiment"
       lore:
-        - "&7Zuzywa podane reagenty i uruchamia badanie."
+        - "&7Consumes the reagents and launches research."
     claim:
       material: CHEST
-      name: "&aOdbierz wyniki"
+      name: "&aClaim Finished"
       lore:
-        - "&7Zbierz nagrody i zwieksz postep receptury."
+        - "&7Collect rewards and increase recipe progress."
     empty:
       material: BARRIER
-      name: "&7Brak aktywnych eksperymentow"
+      name: "&7No active experiments"
       lore:
-        - "&7Umiesc reagenty aby rozpoczac nowe badania."
+        - "&7Insert reagents to begin a new study."
 
 recipes:
-  title: "&eKsiega Receptur"
+  title: "&eRecipe Codex"
   size: 54
   layout:
     next: 53
@@ -101,27 +101,27 @@ recipes:
   decor:
     4:
       material: BOOK
-      name: "&fPostep badan"
+      name: "&fResearch Progress"
       lore:
-        - "&7Zielony kolor oznacza recepture gotowa do uzycia."
-        - "&7Czerwony oznacza brak wymaganego postepu."
+        - "&7Green means the recipe is unlocked."
+        - "&7Red means you need more progress."
     49:
       material: HOPPER
-      name: "&7Poruszanie"
+      name: "&7Navigation"
       lore:
-        - "&fKliknij strzalki aby zmienic strone listy."
+        - "&7Use the arrows to change pages."
   icons:
     next:
       material: ARROW
-      name: "&aNastepna strona"
+      name: "&aNext Page"
     prev:
       material: ARROW
-      name: "&aPoprzednia strona"
+      name: "&aPrevious Page"
     empty:
       material: PAPER
-      name: "&7Brak receptur do wyswietlenia"
+      name: "&7No recipes to show"
       lore:
-        - "&7Wykonuj badania, by odblokowac nowe przepisy."
+        - "&7Complete research to unlock new entries."
 
 abyssal:
   title: "&5Abyssal Enchanting"
@@ -139,50 +139,50 @@ abyssal:
   decor:
     2:
       material: SMITHING_TABLE
-      name: "&fInstrukcja"
+      name: "&fInstructions"
       lore:
-        - "&7Lewy slot: przedmiot do wzmocnienia."
-        - "&7Prawy slot: kosc Abyssu odpowiedniej kategorii."
+        - "&7Left slot: item to augment."
+        - "&7Right slot: matching Abyssal Bone."
     6:
       material: WITHER_SKELETON_SKULL
-      name: "&dKosci Abyssu"
+      name: "&dAbyssal Bones"
       lore:
-        - "&7Tier kosci musi odpowiadac tierowi modyfikacji."
+        - "&7Bone tier must match the modifier tier."
     16:
       material: EXPERIENCE_BOTTLE
-      name: "&7Wybor efektu"
+      name: "&7Choosing Effects"
       lore:
-        - "&7Wybierz jedna z dwoch opcji lub odrzuc losowanie."
+        - "&7Pick one of two options or reject the roll."
     11:
       material: ITEM_FRAME
-      name: "&fSlot na cel"
+      name: "&fTarget Slot"
       lore:
-        - "&7Umiesc tutaj przedmiot, ktory chcesz wzmocnic."
+        - "&7Place the item you want to empower."
     15:
       material: ITEM_FRAME
-      name: "&fSlot na kosc"
+      name: "&fBone Slot"
       lore:
-        - "&7Wloz pasujaca kosc Abyssu."
+        - "&7Insert a compatible Abyssal Bone."
   icons:
     roll:
       material: ENDER_EYE
-      name: "&dLosuj opcje"
+      name: "&dRoll Options"
       lore:
-        - "&7Zuzywa kosc i proponuje dwie modyfikacje."
+        - "&7Consumes the bone and offers two modifiers."
     a:
       material: LIME_DYE
-      name: "&aWybierz opcje A"
+      name: "&aChoose Option A"
     b:
       material: LIGHT_BLUE_DYE
-      name: "&bWybierz opcje B"
+      name: "&bChoose Option B"
     reject:
       material: BARRIER
-      name: "&cOdrzuc losowanie"
+      name: "&cReject Roll"
       lore:
-        - "&7Zachowujesz kosc, ale tracisz aktualne opcje."
+        - "&7The bone is consumed and the options are lost."
 
 confirm:
-  title: "&dPotwierdz modyfikacje"
+  title: "&dConfirm Modification"
   size: 27
   layout:
     yes: 11
@@ -193,11 +193,11 @@ confirm:
   icons:
     yes:
       material: LIME_WOOL
-      name: "&aPotwierdz"
+      name: "&aConfirm"
       lore:
-        - "&7Zapisz wybrana modyfikacje na przedmiocie."
+        - "&7Apply the chosen modifier to the item."
     no:
       material: RED_WOOL
-      name: "&cAnuluj"
+      name: "&cCancel"
       lore:
-        - "&7Wroc do wyboru opcji bez zmian."
+        - "&7Return to the selection without changes."

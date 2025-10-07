@@ -264,6 +264,24 @@ public class GuiManager implements Listener {
         return it;
     }
 
+    private boolean consumeBone(Inventory inv, int boneSlot) {
+        if (inv == null) {
+            return false;
+        }
+        ItemStack bone = inv.getItem(boneSlot);
+        if (bone == null || bone.getType().isAir()) {
+            return false;
+        }
+        int amount = bone.getAmount();
+        if (amount <= 1) {
+            inv.setItem(boneSlot, null);
+        } else {
+            bone.setAmount(amount - 1);
+            inv.setItem(boneSlot, bone);
+        }
+        return true;
+    }
+
     @EventHandler
     public void onClick(InventoryClickEvent e) {
         HumanEntity he = e.getWhoClicked();
@@ -367,8 +385,14 @@ public class GuiManager implements Listener {
                     pendingChoice.put(p.getUniqueId(), 1);
                     openConfirm(p);
                 } else if (rawSlot == reject) {
-                    rollStates.remove(p.getUniqueId());
-                    sendMessage(p, "reject_done", "&7Roll discarded. No changes applied.");
+                    RollState st = rollStates.remove(p.getUniqueId());
+                    boolean consumed = st != null && consumeBone(st.invRef, boneSlot);
+                    if (consumed) {
+                        sendMessage(p, "reject_done", "&7Roll discarded. The bone was consumed.");
+                    } else {
+                        String prefix = plugin.getConfigManager().messages().getString("prefix", "");
+                        p.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(prefix + "&7Roll discarded."));
+                    }
                     p.closeInventory();
                 }
             }

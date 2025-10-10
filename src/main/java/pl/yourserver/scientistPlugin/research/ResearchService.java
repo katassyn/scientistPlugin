@@ -125,7 +125,7 @@ public class ResearchService {
             String desc = recipe.getString("description", "");
             try (PreparedStatement ps = c.prepareStatement("INSERT INTO sci_experiment_log (player_uuid, recipe_key, started_at, metadata) VALUES (UNHEX(REPLACE(?,'-','')), ?, NOW(), ?)")) {
                 ps.setString(1, player.getUniqueId().toString());
-                ps.setString(2, title);
+                ps.setString(2, recipeKey);
                 ps.setString(3, desc);
                 ps.executeUpdate();
             }

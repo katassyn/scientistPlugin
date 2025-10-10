@@ -81,6 +81,18 @@ public class Database {
                             "INDEX (player_uuid), INDEX (status), INDEX (end_at))")) {
                 ps.execute();
             }
+            // sci_experiment_log
+            try (PreparedStatement ps = c.prepareStatement(
+                    "CREATE TABLE IF NOT EXISTS sci_experiment_log (" +
+                            "id BIGINT AUTO_INCREMENT PRIMARY KEY," +
+                            "player_uuid BINARY(16) NOT NULL," +
+                            "recipe_key VARCHAR(64) NOT NULL," +
+                            "started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                            "metadata TEXT," +
+                            "FOREIGN KEY (recipe_key) REFERENCES sci_recipe(recipe_key)," +
+                            "INDEX (player_uuid), INDEX (started_at))")) {
+                ps.execute();
+            }
             // sci_abyssal_log
             try (PreparedStatement ps = c.prepareStatement(
                     "CREATE TABLE IF NOT EXISTS sci_abyssal_log (" +

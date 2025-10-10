@@ -27,9 +27,27 @@ public class Texts {
         if (key == null || key.isEmpty()) return "";
         String[] parts = key.split("_");
         StringBuilder sb = new StringBuilder();
-        for (String p : parts) {
+        for (String raw : parts) {
+            if (raw == null) continue;
+            String p = raw.trim();
             if (p.isEmpty()) continue;
-            sb.append(Character.toUpperCase(p.charAt(0))).append(p.length() > 1 ? p.substring(1) : "").append(" ");
+            if (p.matches("[IVXLCDM]+")) {
+                sb.append(p.toUpperCase(Locale.ROOT)).append(' ');
+                continue;
+            }
+            if (p.chars().allMatch(Character::isUpperCase)) {
+                sb.append(p).append(' ');
+                continue;
+            }
+            if (p.chars().allMatch(Character::isDigit)) {
+                sb.append(p).append(' ');
+                continue;
+            }
+            sb.append(Character.toUpperCase(p.charAt(0)));
+            if (p.length() > 1) {
+                sb.append(p.substring(1).toLowerCase(Locale.ROOT));
+            }
+            sb.append(' ');
         }
         return sb.toString().trim();
     }

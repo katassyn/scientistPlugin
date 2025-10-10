@@ -57,7 +57,16 @@ public class ResearchService {
         Map<String, RecipeStatus> status = getPlayerRecipeStatus(player.getUniqueId());
         if (!prerequisitesMet(status, recipe)) {
             List<String> reqs = recipe.getStringList("requires");
-            String missing = (reqs == null || reqs.isEmpty()) ? recipeKey : String.join(", ", reqs);
+            List<String> formatted = new ArrayList<>();
+            if (reqs != null) {
+                for (String req : reqs) {
+                    formatted.add(pl.yourserver.scientistPlugin.util.Texts.prettyKey(req));
+                }
+            }
+            if (formatted.isEmpty()) {
+                formatted.add(pl.yourserver.scientistPlugin.util.Texts.prettyKey(recipeKey));
+            }
+            String missing = String.join(", ", formatted);
             String text = plugin.getConfigManager().messages().getString("experiment_prereq", "&cYou must unlock previous tier first: {key}");
             text = text.replace("{key}", missing);
             player.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(text));

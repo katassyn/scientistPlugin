@@ -104,20 +104,18 @@ abyssal:
   layout:
     target_slot: 20
     bone_slot: 24
-    roll_button: 31
+    option_a_display: 29
     select_a: 30
+    roll_button: 31
     select_b: 32
+    option_b_display: 33
     reject: 40
+    back_button: 36
+    instructions_button: 4
   background:
     material: BLACK_STAINED_GLASS_PANE
     name: ""
   decor:
-    2:
-      material: SMITHING_TABLE
-      name: "&fInstructions"
-      lore:
-        - "&7Left slot: item to augment."
-        - "&7Right slot: matching Abyssal Bone."
     6:
       material: WITHER_SKELETON_SKULL
       name: "&dAbyssal Bones"
@@ -144,17 +142,39 @@ abyssal:
       name: "&dEnchant"
       lore:
         - "&7Consume the bone to reveal two modifiers."
-    a:
+    select_a:
       material: LIME_DYE
-      name: "&aChoose Option A"
-    b:
+      name: "&aAccept Option A"
+      lore:
+        - "&7Apply the modifier shown to the left."
+    select_b:
       material: LIGHT_BLUE_DYE
-      name: "&bChoose Option B"
+      name: "&bAccept Option B"
+      lore:
+        - "&7Apply the modifier shown to the right."
     reject:
       material: BARRIER
       name: "&cDiscard"
       lore:
         - "&7Destroy the bone and return the item."
+    back:
+      material: ARROW
+      name: "&7Back"
+      lore:
+        - "&7Return to the Scientist laboratory."
+    instructions:
+      material: KNOWLEDGE_BOOK
+      name: "&fInstructions"
+      lore:
+        - "&7Click to read how Abyssal enchanting works."
+    option_info:
+      material: ENCHANTED_BOOK
+      name: ""
+    pending:
+      material: BLACK_STAINED_GLASS_PANE
+      name: "&8Awaiting Roll"
+      lore:
+        - "&7Place an item and matching bone, then press Enchant."
 
 confirm:
   title: "&dConfirm Modification"

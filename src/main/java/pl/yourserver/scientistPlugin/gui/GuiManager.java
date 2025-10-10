@@ -257,6 +257,9 @@ public class GuiManager implements Listener {
     }
 
     public void openAbyssal(Player p) {
+        UUID uid = p.getUniqueId();
+        rollStates.remove(uid);
+        pendingChoice.remove(uid);
         FileConfiguration gui = plugin.getConfigManager().gui();
         ConfigurationSection abyssSec = gui.getConfigurationSection("abyssal");
         String title = abyssSec.getString("title", "Abyssal Enchanting");
@@ -269,6 +272,10 @@ public class GuiManager implements Listener {
         int reject = layout.getInt("reject", 40);
         int targetSlot = layout.getInt("target_slot", 20);
         int boneSlot = layout.getInt("bone_slot", 24);
+        int backSlot = layout.getInt("back_button", 36);
+        int infoASlot = layout.getInt("option_a_display", -1);
+        int infoBSlot = layout.getInt("option_b_display", -1);
+        int instructionsSlot = layout.getInt("instructions_button", -1);
         Set<Integer> reserved = new HashSet<>();
         reserved.add(rollSlot);
         reserved.add(selectA);
@@ -276,13 +283,21 @@ public class GuiManager implements Listener {
         reserved.add(reject);
         reserved.add(targetSlot);
         reserved.add(boneSlot);
+        if (backSlot >= 0) reserved.add(backSlot);
+        if (infoASlot >= 0) reserved.add(infoASlot);
+        if (infoBSlot >= 0) reserved.add(infoBSlot);
+        if (instructionsSlot >= 0) reserved.add(instructionsSlot);
         reserved.addAll(collectDecorSlots(abyssSec));
         applyBackground(inv, abyssSec, reserved);
         applyDecor(inv, abyssSec);
+        resetAbyssalInterface(inv, abyssSec);
         inv.setItem(rollSlot, configuredItem(abyssSec.getConfigurationSection("icons.roll"), "ENDER_EYE", "&dEnchant"));
-        inv.setItem(selectA, configuredItem(abyssSec.getConfigurationSection("icons.a"), "GREEN_DYE", "&aOption A"));
-        inv.setItem(selectB, configuredItem(abyssSec.getConfigurationSection("icons.b"), "BLUE_DYE", "&9Option B"));
-        inv.setItem(reject, configuredItem(abyssSec.getConfigurationSection("icons.reject"), "BARRIER", "&cDiscard"));
+        if (backSlot >= 0) {
+            inv.setItem(backSlot, configuredItem(abyssSec.getConfigurationSection("icons.back"), "ARROW", "&7Back"));
+        }
+        if (instructionsSlot >= 0) {
+            inv.setItem(instructionsSlot, configuredItem(abyssSec.getConfigurationSection("icons.instructions"), "BOOK", "&fInstructions"));
+        }
 
         presentInventory(p, "abyssal", inv);
     }
@@ -436,7 +451,8 @@ public class GuiManager implements Listener {
             lore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&7Prerequisites:"));
             for (String req : template.requires) {
                 boolean unlocked = status.getOrDefault(req, new ResearchService.RecipeStatus(false, 0)).unlocked;
-                lore.add(pl.yourserver.scientistPlugin.util.Texts.legacy((unlocked ? "&a" : "&c") + "- " + req));
+                String prettyReq = pl.yourserver.scientistPlugin.util.Texts.prettyKey(req);
+                lore.add(pl.yourserver.scientistPlugin.util.Texts.legacy((unlocked ? "&a" : "&c") + "- " + prettyReq));
             }
         }
         if (selected) {
@@ -613,16 +629,47 @@ public class GuiManager implements Listener {
         return true;
     }
 
+    private void resetAbyssalInterface(Inventory inv, ConfigurationSection abyssSec) {
+        if (abyssSec == null) {
+            return;
+        }
+        ConfigurationSection layout = abyssSec.getConfigurationSection("layout");
+        if (layout == null) {
+            return;
+        }
+        int selectA = layout.getInt("select_a", 30);
+        int selectB = layout.getInt("select_b", 32);
+        int reject = layout.getInt("reject", 40);
+        int infoASlot = layout.getInt("option_a_display", -1);
+        int infoBSlot = layout.getInt("option_b_display", -1);
+        ConfigurationSection icons = abyssSec.getConfigurationSection("icons");
+        ItemStack pending = configuredItem(icons == null ? null : icons.getConfigurationSection("pending"), "GRAY_STAINED_GLASS_PANE", "&7Awaiting roll");
+        if (infoASlot >= 0 && infoASlot < inv.getSize()) {
+            inv.setItem(infoASlot, pending == null ? null : pending.clone());
+        }
+        if (infoBSlot >= 0 && infoBSlot < inv.getSize()) {
+            inv.setItem(infoBSlot, pending == null ? null : pending.clone());
+        }
+        if (selectA >= 0 && selectA < inv.getSize()) {
+            inv.setItem(selectA, null);
+        }
+        if (selectB >= 0 && selectB < inv.getSize()) {
+            inv.setItem(selectB, null);
+        }
+        if (reject >= 0 && reject < inv.getSize()) {
+            inv.setItem(reject, null);
+        }
+    }
+
     private void handleAbyssalSlotUpdate(Player player, Inventory inv) {
         FileConfiguration gui = plugin.getConfigManager().gui();
-        ConfigurationSection layout = gui.getConfigurationSection("abyssal.layout");
+        ConfigurationSection abyssSec = gui.getConfigurationSection("abyssal");
+        ConfigurationSection layout = abyssSec == null ? null : abyssSec.getConfigurationSection("layout");
         if (layout == null) {
             return;
         }
         int targetSlot = layout.getInt("target_slot", 20);
         int boneSlot = layout.getInt("bone_slot", 24);
-        int selectA = layout.getInt("select_a", 30);
-        int selectB = layout.getInt("select_b", 32);
         UUID uid = player.getUniqueId();
 
         ItemStack target = inv.getItem(targetSlot);
@@ -651,9 +698,7 @@ public class GuiManager implements Listener {
         pendingChoice.remove(uid);
         RollState previous = rollStates.remove(uid);
         if (previous != null) {
-            ConfigurationSection icons = gui.getConfigurationSection("abyssal.icons");
-            inv.setItem(selectA, configuredItem(icons == null ? null : icons.getConfigurationSection("a"), "GREEN_DYE", "&aOption A"));
-            inv.setItem(selectB, configuredItem(icons == null ? null : icons.getConfigurationSection("b"), "BLUE_DYE", "&9Option B"));
+            resetAbyssalInterface(inv, abyssSec);
         }
     }
 
@@ -751,13 +796,20 @@ public class GuiManager implements Listener {
             }
 
             case "abyssal" -> {
-                ConfigurationSection layout = gui.getConfigurationSection("abyssal.layout");
+                ConfigurationSection abyssSec = gui.getConfigurationSection("abyssal");
+                ConfigurationSection layout = abyssSec == null ? null : abyssSec.getConfigurationSection("layout");
+                if (layout == null) {
+                    e.setCancelled(true);
+                    return;
+                }
                 int roll = layout.getInt("roll_button", 31);
                 int selectA = layout.getInt("select_a", 30);
                 int selectB = layout.getInt("select_b", 32);
                 int reject = layout.getInt("reject", 40);
                 int targetSlot = layout.getInt("target_slot", 20);
                 int boneSlot = layout.getInt("bone_slot", 24);
+                int backSlot = layout.getInt("back_button", -1);
+                int instructionsSlot = layout.getInt("instructions_button", -1);
                 boolean slotInteraction = rawSlot == targetSlot || rawSlot == boneSlot;
                 if (topClick && slotInteraction) {
                     cancel = false;
@@ -769,22 +821,59 @@ public class GuiManager implements Listener {
                 }
                 if (rawSlot == roll) {
                     plugin.getAbyssalService().rollOptions(p, e.getInventory(), rollStates);
-                } else if (rawSlot == selectA) {
-                    pendingChoice.put(p.getUniqueId(), 0);
-                    openConfirm(p);
-                } else if (rawSlot == selectB) {
-                    pendingChoice.put(p.getUniqueId(), 1);
-                    openConfirm(p);
-                } else if (rawSlot == reject) {
-                    RollState st = rollStates.remove(p.getUniqueId());
-                    boolean consumed = st != null && consumeBone(st.invRef, boneSlot);
-                    if (consumed) {
-                        sendMessage(p, "reject_done", "&7Roll discarded. The bone was consumed.");
+                    return;
+                }
+
+                if (backSlot >= 0 && rawSlot == backSlot) {
+                    refundSlots(p, top, new int[]{targetSlot, boneSlot});
+                    rollStates.remove(p.getUniqueId());
+                    pendingChoice.remove(p.getUniqueId());
+                    openMain(p);
+                    return;
+                }
+
+                if (instructionsSlot >= 0 && rawSlot == instructionsSlot) {
+                    sendAbyssalInstructions(p);
+                    return;
+                }
+
+                RollState st = rollStates.get(p.getUniqueId());
+
+                if (rawSlot == selectA) {
+                    if (st == null) {
+                        sendMessage(p, "roll_not_ready", "&cPress Enchant to reveal modifiers first.");
                     } else {
-                        String prefix = plugin.getConfigManager().messages().getString("prefix", "");
-                        p.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(prefix + "&7Roll discarded."));
+                        pendingChoice.put(p.getUniqueId(), 0);
+                        openConfirm(p);
                     }
-                    p.closeInventory();
+                    return;
+                }
+                if (rawSlot == selectB) {
+                    if (st == null) {
+                        sendMessage(p, "roll_not_ready", "&cPress Enchant to reveal modifiers first.");
+                    } else {
+                        pendingChoice.put(p.getUniqueId(), 1);
+                        openConfirm(p);
+                    }
+                    return;
+                }
+                if (rawSlot == reject) {
+                    if (st == null) {
+                        sendMessage(p, "roll_not_ready", "&cPress Enchant to reveal modifiers first.");
+                    } else {
+                        boolean consumed = consumeBone(top, boneSlot);
+                        rollStates.remove(p.getUniqueId());
+                        pendingChoice.remove(p.getUniqueId());
+                        refundSlots(p, top, new int[]{targetSlot});
+                        resetAbyssalInterface(top, abyssSec);
+                        if (consumed) {
+                            sendMessage(p, "reject_done", "&7Roll discarded. The bone was consumed.");
+                        } else {
+                            String prefix = plugin.getConfigManager().messages().getString("prefix", "");
+                            p.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(prefix + "&7Roll discarded."));
+                        }
+                    }
+                    return;
                 }
             }
             case "confirm" -> {
@@ -799,8 +888,7 @@ public class GuiManager implements Listener {
                     pendingChoice.remove(p.getUniqueId());
                     RollState st = rollStates.get(p.getUniqueId());
                     if (st != null && st.invRef != null) {
-                        openGui.put(p.getUniqueId(), "abyssal");
-                        p.openInventory(st.invRef);
+                        presentInventory(p, "abyssal", st.invRef);
                     } else {
                         p.closeInventory();
                     }
@@ -926,7 +1014,9 @@ public class GuiManager implements Listener {
 
     private void sendMessage(Player p, String path, String def) {
         String prefix = plugin.getConfigManager().messages().getString("prefix", "");
-        String msg = plugin.getConfigManager().messages().getString(path, def);
+        String msg = (path == null || path.isEmpty())
+                ? def
+                : plugin.getConfigManager().messages().getString(path, def);
         if (msg == null || msg.isEmpty()) return;
         p.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(prefix + msg));
     }
@@ -935,6 +1025,18 @@ public class GuiManager implements Listener {
         List<String> lines = plugin.getConfigManager().messages().getStringList("help_lines");
         if (lines == null || lines.isEmpty()) {
             sendMessage(p, "help_fallback", "&7Submit reagents to begin research and unlock recipes.");
+            return;
+        }
+        String prefix = plugin.getConfigManager().messages().getString("prefix", "");
+        for (String line : lines) {
+            p.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(prefix + line));
+        }
+    }
+
+    private void sendAbyssalInstructions(Player p) {
+        List<String> lines = plugin.getConfigManager().messages().getStringList("abyssal_instructions");
+        if (lines == null || lines.isEmpty()) {
+            sendMessage(p, "abyssal_help_fallback", "&7Place an item and matching bone, then press Enchant.");
             return;
         }
         String prefix = plugin.getConfigManager().messages().getString("prefix", "");

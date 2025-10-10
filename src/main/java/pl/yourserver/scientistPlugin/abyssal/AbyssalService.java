@@ -129,30 +129,68 @@ public class AbyssalService {
         st.tier = tier;
         st.keys[0] = pa.key;
         st.keys[1] = pb.key;
-        // Resolve min/max from the chosen pool and update preview icons
+
+        ConfigurationSection icons = gui.getConfigurationSection("abyssal.icons");
+        int infoASlot = gui.getInt("abyssal.layout.option_a_display", 29);
+        int infoBSlot = gui.getInt("abyssal.layout.option_b_display", 33);
+        int selectASlot = gui.getInt("abyssal.layout.select_a", 30);
+        int selectBSlot = gui.getInt("abyssal.layout.select_b", 32);
+        int rejectSlot = gui.getInt("abyssal.layout.reject", 40);
+
+        boolean[] placed = new boolean[2];
         for (int i = 0; i < 2; i++) {
             String k = st.keys[i];
             boolean isWc = (i == 0 ? pa.fromWildcard : pb.fromWildcard);
             ConfigurationSection src = isWc ? wildPools.getConfigurationSection(k) : pools.getConfigurationSection(k);
+            if (src == null) {
+                continue;
+            }
             ConfigurationSection tiers = src.getConfigurationSection("tiers");
+            if (tiers == null) {
+                continue;
+            }
             st.min[i] = tiers.getDouble(tier + ".min");
             st.max[i] = tiers.getDouble(tier + ".max");
-            // Place preview into GUI
-            int slot = (i == 0) ? gui.getInt("abyssal.layout.select_a", 30) : gui.getInt("abyssal.layout.select_b", 32);
-            String iconPath = (i == 0) ? "abyssal.icons.a" : "abyssal.icons.b";
-            placeOptionIcon(inv, gui, src, k, tier, st.min[i], st.max[i], slot, iconPath, i == 0 ? "A" : "B", isWc);
+            int slot = (i == 0) ? infoASlot : infoBSlot;
+            placeOptionIcon(inv, icons, src, k, tier, st.min[i], st.max[i], slot, i == 0 ? "A" : "B", isWc);
+            placed[i] = true;
         }
+
+        if (!placed[0] || !placed[1]) {
+            sendMessage(p, "roll_failed", "&cUnable to build modifier previews. Check configuration.");
+            return;
+        }
+
+        if (selectASlot >= 0 && selectASlot < inv.getSize()) {
+            inv.setItem(selectASlot, configuredGuiItem(icons == null ? null : icons.getConfigurationSection("select_a"), "LIME_DYE", "&aAccept Option A"));
+        }
+        if (selectBSlot >= 0 && selectBSlot < inv.getSize()) {
+            inv.setItem(selectBSlot, configuredGuiItem(icons == null ? null : icons.getConfigurationSection("select_b"), "LIGHT_BLUE_DYE", "&bAccept Option B"));
+        }
+        if (rejectSlot >= 0 && rejectSlot < inv.getSize()) {
+            inv.setItem(rejectSlot, configuredGuiItem(icons == null ? null : icons.getConfigurationSection("reject"), "BARRIER", "&cDiscard"));
+        }
+
         st.invRef = inv;
         rollStates.put(p.getUniqueId(), st);
 
         sendMessage(p, "roll_ready", "&aRolled two options. Choose A or B, or Reject.");
     }
 
-    private void placeOptionIcon(Inventory inv, FileConfiguration gui, ConfigurationSection src, String key, int tier, double min, double max, int slot, String iconPath, String label, boolean isWildcard) {
-        String matName = Optional.ofNullable(gui.getConfigurationSection(iconPath)).map(cs -> cs.getString("material")).orElse("PAPER");
-        org.bukkit.Material mat = org.bukkit.Material.matchMaterial(matName == null ? "PAPER" : matName.toUpperCase(Locale.ROOT));
-        if (mat == null) mat = org.bukkit.Material.PAPER;
-        ItemStack it = new ItemStack(mat);
+    private void placeOptionIcon(Inventory inv,
+                                 ConfigurationSection icons,
+                                 ConfigurationSection src,
+                                 String key,
+                                 int tier,
+                                 double min,
+                                 double max,
+                                 int slot,
+                                 String label,
+                                 boolean isWildcard) {
+        if (slot < 0 || slot >= inv.getSize()) {
+            return;
+        }
+        ItemStack it = configuredGuiItem(icons == null ? null : icons.getConfigurationSection("option_info"), "PAPER", "");
         ItemMeta meta = it.getItemMeta();
         // Fancy name: [ Tier ] Pretty Name  [Option X]
         Component name = pl.yourserver.scientistPlugin.util.Texts.tierTag(tier)
@@ -166,28 +204,79 @@ public class AbyssalService {
 
         // Format range using tier's format if present
         List<Component> lore = new ArrayList<>();
-        String fmt = null;
         ConfigurationSection tiers = src.getConfigurationSection("tiers");
-        if (tiers != null) {
-            fmt = tiers.getString(tier + ".format");
-            if (fmt == null) fmt = tiers.getString("1.format");
+        ConfigurationSection tierSection = tiers != null ? tiers.getConfigurationSection(String.valueOf(tier)) : null;
+        String fmt = tierSection != null ? tierSection.getString("format") : null;
+        if (fmt == null && tiers != null) {
+            fmt = tiers.getString(tier + ".format", fmt);
+        }
+        if (fmt == null && tiers != null) {
+            ConfigurationSection baseTier = tiers.getConfigurationSection("1");
+            if (baseTier != null) {
+                fmt = baseTier.getString("format");
+            }
+        }
+        String type = tierSection != null ? tierSection.getString("type") : null;
+        if (type == null || type.isEmpty()) {
+            type = tiers != null ? tiers.getString(tier + ".type") : null;
+        }
+        if ((type == null || type.isEmpty()) && src.contains("type")) {
+            type = src.getString("type");
+        }
+        if (type != null && !type.isEmpty()) {
+            lore.add(Component.text("Effect: " + pl.yourserver.scientistPlugin.util.Texts.prettyKey(type.toLowerCase(Locale.ROOT)))
+                    .color(NamedTextColor.GOLD)
+                    .decoration(TextDecoration.ITALIC, false));
         }
         String rangeStr;
+        java.text.DecimalFormat df = new java.text.DecimalFormat("0.##");
         if (fmt != null && fmt.contains("{v}")) {
-            String minStr = fmt.replace("{v}", String.format(Locale.US, "%.2f", min));
-            String maxStr = fmt.replace("{v}", String.format(Locale.US, "%.2f", max));
+            String minStr = fmt.replace("{v}", df.format(min));
+            String maxStr = fmt.replace("{v}", df.format(max));
             rangeStr = minStr + " – " + maxStr;
         } else {
-            rangeStr = "+" + String.format(Locale.US, "%.2f", min) + " – +" + String.format(Locale.US, "%.2f", max);
+            rangeStr = "+" + df.format(min) + " – +" + df.format(max);
         }
         lore.add(Component.text("Range: " + rangeStr).color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
         if (isWildcard) {
             lore.add(Component.text("Wildcard roll").color(NamedTextColor.AQUA).decoration(TextDecoration.ITALIC, false));
         }
-        lore.add(Component.text("Click to select Option " + label).color(NamedTextColor.GREEN).decoration(TextDecoration.ITALIC, false));
+        lore.add(Component.text("Use the button below to pick Option " + label)
+                .color(NamedTextColor.GREEN)
+                .decoration(TextDecoration.ITALIC, false));
         meta.lore(lore);
         it.setItemMeta(meta);
         inv.setItem(slot, it);
+    }
+
+    private ItemStack configuredGuiItem(ConfigurationSection sec, String fallbackMaterial, String fallbackName) {
+        String materialName = sec != null ? sec.getString("material", fallbackMaterial) : fallbackMaterial;
+        String display = sec != null ? sec.getString("name", fallbackName) : fallbackName;
+        org.bukkit.Material mat = org.bukkit.Material.matchMaterial(materialName == null ? fallbackMaterial : materialName.toUpperCase(Locale.ROOT));
+        if (mat == null) {
+            mat = org.bukkit.Material.matchMaterial(fallbackMaterial);
+        }
+        if (mat == null) {
+            mat = org.bukkit.Material.PAPER;
+        }
+        ItemStack it = new ItemStack(mat);
+        ItemMeta meta = it.getItemMeta();
+        if (display != null && !display.isEmpty()) {
+            meta.displayName(pl.yourserver.scientistPlugin.util.Texts.legacy(display));
+        }
+        List<String> loreLines = sec != null ? sec.getStringList("lore") : Collections.emptyList();
+        if (!loreLines.isEmpty()) {
+            List<Component> lore = new ArrayList<>();
+            for (String line : loreLines) {
+                lore.add(pl.yourserver.scientistPlugin.util.Texts.legacy(line));
+            }
+            meta.lore(lore);
+        }
+        if (sec != null && sec.contains("model")) {
+            meta.setCustomModelData(sec.getInt("model"));
+        }
+        it.setItemMeta(meta);
+        return it;
     }
 
     public void applySelected(Player p, Map<UUID, GuiManager.RollState> rollStates, int choiceIdx) {

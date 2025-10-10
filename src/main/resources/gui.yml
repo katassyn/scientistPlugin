@@ -3,7 +3,7 @@ main:
   size: 27
   layout:
     research_slot: 11
-    recipe_slot: 13
+    crafting_slot: 13
     abyssal_slot: 15
     help_slot: 26
   background:
@@ -29,11 +29,12 @@ main:
       name: "&aResearch"
       lore:
         - "&7Experiment with reagents to gain progress."
-    recipe:
+    crafting:
       material: KNOWLEDGE_BOOK
-      name: "&eRecipes"
+      name: "&eScientist Crafting"
       lore:
-        - "&7Preview unlocked recipes and requirements."
+        - "&7Open the Scientist category in the crafting hub."
+        - "&7Temporary access granted automatically."
     abyssal:
       material: ENCHANTING_TABLE
       name: "&5Abyssal Enchanting"
@@ -51,7 +52,9 @@ research:
   layout:
     start_button: 40
     claim_button: 41
-    input_slots: [ 10, 11, 12, 19, 20, 21, 28, 29, 30 ]
+    prev_button: 36
+    next_button: 44
+    template_slots: [ 10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34 ]
   background:
     material: BLACK_STAINED_GLASS_PANE
     name: ""
@@ -60,8 +63,8 @@ research:
       material: AMETHYST_SHARD
       name: "&dLab Status"
       lore:
-        - "&7Place reagents from the Ingredient Pouch below."
-        - "&7Each experiment takes a fixed amount of time."
+        - "&7Select an experiment below to view its reagents."
+        - "&7Click Start to launch it if you have enough materials."
     13:
       material: CHEST
       name: "&fClaim Results"
@@ -71,7 +74,7 @@ research:
       material: CLOCK
       name: "&7Limits"
       lore:
-        - "&7Remember the cap on concurrent experiments."
+        - "&71 active experiment at a time."
   icons:
     start:
       material: LIME_DYE
@@ -83,45 +86,17 @@ research:
       name: "&aClaim Finished"
       lore:
         - "&7Collect rewards and increase recipe progress."
+    prev:
+      material: ARROW
+      name: "&aPrevious Page"
+    next:
+      material: ARROW
+      name: "&aNext Page"
     empty:
       material: BARRIER
       name: "&7No active experiments"
       lore:
-        - "&7Insert reagents to begin a new study."
-
-recipes:
-  title: "&eRecipe Codex"
-  size: 54
-  layout:
-    next: 53
-    prev: 45
-  background:
-    material: BLACK_STAINED_GLASS_PANE
-    name: ""
-  decor:
-    4:
-      material: BOOK
-      name: "&fResearch Progress"
-      lore:
-        - "&7Green means the recipe is unlocked."
-        - "&7Red means you need more progress."
-    49:
-      material: HOPPER
-      name: "&7Navigation"
-      lore:
-        - "&7Use the arrows to change pages."
-  icons:
-    next:
-      material: ARROW
-      name: "&aNext Page"
-    prev:
-      material: ARROW
-      name: "&aPrevious Page"
-    empty:
-      material: PAPER
-      name: "&7No recipes to show"
-      lore:
-        - "&7Complete research to unlock new entries."
+        - "&7Start an experiment to see its progress here."
 
 abyssal:
   title: "&5Abyssal Enchanting"
@@ -166,9 +141,9 @@ abyssal:
   icons:
     roll:
       material: ENDER_EYE
-      name: "&dRoll Options"
+      name: "&dEnchant"
       lore:
-        - "&7Consumes the bone and offers two modifiers."
+        - "&7Consume the bone to reveal two modifiers."
     a:
       material: LIME_DYE
       name: "&aChoose Option A"
@@ -177,9 +152,9 @@ abyssal:
       name: "&bChoose Option B"
     reject:
       material: BARRIER
-      name: "&cReject Roll"
+      name: "&cDiscard"
       lore:
-        - "&7The bone is consumed and the options are lost."
+        - "&7Destroy the bone and return the item."
 
 confirm:
   title: "&dConfirm Modification"

@@ -7,17 +7,23 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Player;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.permissions.PermissionAttachment;
 import pl.yourserver.scientistPlugin.ScientistPlugin;
 import pl.yourserver.scientistPlugin.item.ItemService;
+import pl.yourserver.scientistPlugin.research.ResearchService;
 
+import java.time.Instant;
 import java.util.*;
 
 public class GuiManager implements Listener {
@@ -27,9 +33,14 @@ public class GuiManager implements Listener {
     private final Map<UUID, Inventory> activeInventories = new HashMap<>();
     private final Map<UUID, RollState> rollStates = new HashMap<>();
     private final Map<UUID, Integer> pendingChoice = new HashMap<>();
-    private final Map<UUID, Integer> recipePage = new HashMap<>();
-    private final Map<UUID, Map<Integer, String>> recipeSlotMap = new HashMap<>();
-
+    private final Map<UUID, String> selectedResearch = new HashMap<>();
+    private final Map<UUID, Map<Integer, String>> researchSlotMap = new HashMap<>();
+    private final Map<UUID, Integer> researchPage = new HashMap<>();
+    private static final int[] DEFAULT_TEMPLATE_SLOTS = new int[]{
+            10, 11, 12, 13, 14, 15, 16,
+            19, 20, 21, 22, 23, 24, 25,
+            28, 29, 30, 31, 32, 33, 34
+    };
     public GuiManager(ScientistPlugin plugin, ItemService itemService) {
         this.plugin = plugin;
         this.itemService = itemService;
@@ -55,21 +66,25 @@ public class GuiManager implements Listener {
 
         ConfigurationSection layout = mainSec.getConfigurationSection("layout");
         ConfigurationSection icons = mainSec.getConfigurationSection("icons");
-        java.util.Set<Integer> reserved = new java.util.HashSet<>();
+        Set<Integer> reserved = new HashSet<>();
         int researchSlot = layout.getInt("research_slot", 11);
-        int recipeSlot = layout.getInt("recipe_slot", 13);
+        int craftingSlot = layout.contains("crafting_slot")
+                ? layout.getInt("crafting_slot")
+                : layout.getInt("recipe_slot", 13);
         int abyssalSlot = layout.getInt("abyssal_slot", 15);
         int helpSlot = layout.getInt("help_slot", 26);
         reserved.add(researchSlot);
-        reserved.add(recipeSlot);
+        reserved.add(craftingSlot);
         reserved.add(abyssalSlot);
         reserved.add(helpSlot);
+        reserved.addAll(collectDecorSlots(mainSec));
         applyBackground(inv, mainSec, reserved);
+        applyDecor(inv, mainSec);
 
-        inv.setItem(researchSlot, configuredItem(icons.getConfigurationSection("research"), "BREWING_STAND", "&aResearch Lab"));
-        inv.setItem(recipeSlot, configuredItem(icons.getConfigurationSection("recipe"), "BOOK", "&eRecipe Book"));
-        inv.setItem(abyssalSlot, configuredItem(icons.getConfigurationSection("abyssal"), "ENCHANTING_TABLE", "&5Abyssal Enchanting"));
-        inv.setItem(helpSlot, configuredItem(icons.getConfigurationSection("help"), "KNOWLEDGE_BOOK", "&7Help"));
+        inv.setItem(researchSlot, configuredItem(iconSection(icons, "research"), "BREWING_STAND", "&aResearch Lab"));
+        inv.setItem(craftingSlot, configuredItem(iconSection(icons, "crafting", "recipe"), "BOOK", "&eScientist Crafting"));
+        inv.setItem(abyssalSlot, configuredItem(iconSection(icons, "abyssal"), "ENCHANTING_TABLE", "&5Abyssal Enchanting"));
+        inv.setItem(helpSlot, configuredItem(iconSection(icons, "help"), "KNOWLEDGE_BOOK", "&7Help"));
 
         presentInventory(p, "main", inv);
         sendMessage(p, "open_main", "&aOpening Scientist Lab...");
@@ -86,115 +101,159 @@ public class GuiManager implements Listener {
         int size = researchSec.getInt("size", 45);
         Inventory inv = Bukkit.createInventory(p, size, Component.text(title));
         ConfigurationSection layout = researchSec.getConfigurationSection("layout");
+        int[] templateSlots = resolveTemplateSlots(layout.getIntegerList("template_slots"));
         int startSlot = layout.getInt("start_button", 40);
         int claimSlot = layout.getInt("claim_button", 41);
-        java.util.Set<Integer> reserved = new java.util.HashSet<>();
+        int prevSlot = layout.getInt("prev_button", 36);
+        int nextSlot = layout.getInt("next_button", 44);
+        Set<Integer> reserved = new HashSet<>();
         reserved.add(startSlot);
         reserved.add(claimSlot);
-        int[] inputSlots = layout.getIntegerList("input_slots").stream().mapToInt(i -> i).toArray();
-        for (int s : inputSlots) reserved.add(s);
+        if (prevSlot >= 0) reserved.add(prevSlot);
+        if (nextSlot >= 0) reserved.add(nextSlot);
+        reserved.addAll(collectDecorSlots(researchSec));
         applyBackground(inv, researchSec, reserved);
+        applyDecor(inv, researchSec);
 
-        inv.setItem(startSlot, configuredItem(researchSec.getConfigurationSection("icons.start"), "LIME_DYE", "&aStart Experiment"));
-        inv.setItem(claimSlot, configuredItem(researchSec.getConfigurationSection("icons.claim"), "CHEST", "&aClaim Finished"));
+        UUID uuid = p.getUniqueId();
+        List<ResearchService.TemplateView> templates = plugin.getResearchService().buildTemplates(uuid);
+        Map<String, ResearchService.TemplateView> templateByKey = new HashMap<>();
+        templates.forEach(t -> templateByKey.put(t.key, t));
+        Map<String, ResearchService.RecipeStatus> status = plugin.getResearchService().getPlayerRecipeStatus(uuid);
 
-        // List experiments (last 14)
-        java.util.List<pl.yourserver.scientistPlugin.research.ResearchService.UIExperiment> exps = plugin.getResearchService().listExperiments(p.getUniqueId(), 14);
-        int placed = 0;
-        for (pl.yourserver.scientistPlugin.research.ResearchService.UIExperiment row : exps) {
-            int slot = researchGridSlot(placed++);
-            String disp = plugin.getConfigManager().recipes().getConfigurationSection("recipes").getConfigurationSection(row.recipeKey).getString("title", row.recipeKey);
-            String status = row.status;
-            long now = java.time.Instant.now().getEpochSecond();
-            long remain = Math.max(0, row.endEpoch - now);
-            String mat = status.equals("FINISHED") ? "LIME_WOOL" : status.equals("RUNNING") ? "YELLOW_WOOL" : "GRAY_WOOL";
-            ItemStack it = configuredItem(null, mat, (status.equals("FINISHED") ? "&a" : status.equals("RUNNING") ? "&e" : "&7") + disp);
-            ItemMeta meta = it.getItemMeta();
-            java.util.List<Component> lore = new java.util.ArrayList<>();
-            lore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&7Status: &f" + status));
-            if (status.equals("RUNNING")) lore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&7Time left: &f" + (remain/60) + "m"));
-            if (status.equals("FINISHED")) lore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&aClick Claim Finished"));
-            meta.lore(lore);
-            it.setItemMeta(meta);
-            inv.setItem(slot, it);
+        String currentSelection = selectedResearch.get(uuid);
+        if (currentSelection == null || !templateByKey.containsKey(currentSelection)) {
+            if (!templates.isEmpty()) {
+                selectedResearch.put(uuid, templates.get(0).key);
+            } else {
+                selectedResearch.remove(uuid);
+            }
+        }
+
+        int rows = templateSlots.length == 0 ? 1 : 3;
+        if (templateSlots.length % rows != 0) {
+            rows = 1;
+        }
+        int columnsPerPage = rows > 0 ? templateSlots.length / rows : templateSlots.length;
+        if (columnsPerPage <= 0) {
+            columnsPerPage = Math.max(1, templateSlots.length);
+        }
+
+        List<ColumnData> columns = buildColumns(templates, rows);
+
+        int page = researchPage.getOrDefault(uuid, 0);
+        int maxPage = columns.isEmpty() ? 0 : Math.max(0, (columns.size() - 1) / columnsPerPage);
+        if (page > maxPage) {
+            page = maxPage;
+            researchPage.put(uuid, page);
+        }
+        long runningCount = templates.stream().filter(t -> t.running).count();
+        int maxConcurrent = plugin.getConfig().getInt("experiments.max_concurrent_per_player", 1);
+
+        Map<String, Integer> cache = new HashMap<>();
+        Map<String, Boolean> hasAllMap = new HashMap<>();
+        Map<String, Boolean> canStartMap = new HashMap<>();
+        Map<String, List<String>> missingMap = new HashMap<>();
+        for (ResearchService.TemplateView tmpl : templates) {
+            List<String> missing = new ArrayList<>();
+            for (Map.Entry<String, Integer> reagent : tmpl.reagents.entrySet()) {
+                int have = totalAvailable(p, reagent.getKey(), cache);
+                if (have < reagent.getValue()) {
+                    missing.add(reagent.getKey());
+                }
+            }
+            boolean hasAll = missing.isEmpty();
+            boolean canStart = hasAll && tmpl.prerequisitesMet && !tmpl.running && runningCount < maxConcurrent;
+            hasAllMap.put(tmpl.key, hasAll);
+            canStartMap.put(tmpl.key, canStart);
+            missingMap.put(tmpl.key, missing);
+        }
+
+        Map<Integer, String> slotMap = new HashMap<>();
+        int startIndex = page * columnsPerPage;
+        for (int columnOffset = 0; columnOffset < columnsPerPage; columnOffset++) {
+            int columnIndex = startIndex + columnOffset;
+            ColumnData data = columnIndex < columns.size() ? columns.get(columnIndex) : null;
+            for (int row = 0; row < rows; row++) {
+                int slotIdx = row * columnsPerPage + columnOffset;
+                if (slotIdx >= templateSlots.length) {
+                    continue;
+                }
+                int slot = templateSlots[slotIdx];
+                if (data == null) {
+                    continue;
+                }
+                ResearchService.TemplateView tmpl = data.rows[row];
+                if (tmpl == null) {
+                    continue;
+                }
+                boolean selected = tmpl.key.equals(selectedResearch.get(uuid));
+                Set<String> missingSet = new HashSet<>(missingMap.getOrDefault(tmpl.key, Collections.emptyList()));
+                ItemStack icon = buildTemplateIcon(p, tmpl, selected, hasAllMap.getOrDefault(tmpl.key, true), cache, status, missingSet);
+                inv.setItem(slot, icon);
+                slotMap.put(slot, tmpl.key);
+            }
+        }
+        researchSlotMap.put(uuid, slotMap);
+
+        ItemStack startItem = configuredItem(researchSec.getConfigurationSection("icons.start"), "LIME_DYE", "&aStart Experiment");
+        ItemMeta startMeta = startItem.getItemMeta();
+        List<Component> startLore = new ArrayList<>();
+        String selectedKey = selectedResearch.get(uuid);
+        if (runningCount >= maxConcurrent) {
+            startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&cYou already run the maximum number of experiments."));
+        }
+        if (selectedKey != null) {
+            ResearchService.TemplateView selectedTemplate = templateByKey.get(selectedKey);
+            if (selectedTemplate != null) {
+                boolean hasAll = hasAllMap.getOrDefault(selectedKey, true);
+                boolean canStart = canStartMap.getOrDefault(selectedKey, false);
+                List<String> missing = missingMap.getOrDefault(selectedKey, Collections.emptyList());
+                startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&7Selected: &f" + selectedTemplate.title));
+                startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&7Duration: &f" + formatDuration(selectedTemplate.durationHours)));
+                if (!selectedTemplate.prerequisitesMet) {
+                    startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&cMissing prerequisites."));
+                }
+                if (!missing.isEmpty()) {
+                    startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&cMissing reagents:"));
+                    for (String miss : missing) {
+                        startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&c- " + pl.yourserver.scientistPlugin.util.Texts.prettyKey(miss)));
+                    }
+                }
+                startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy(canStart ? "&aClick to begin." : "&cCannot start yet."));
+                startMeta.displayName(pl.yourserver.scientistPlugin.util.Texts.legacy(canStart ? "&aStart Experiment" : "&cStart Experiment"));
+            }
+        } else {
+            startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&7Select an experiment to begin."));
+            startMeta.displayName(pl.yourserver.scientistPlugin.util.Texts.legacy("&7Start Experiment"));
+        }
+        startMeta.lore(startLore);
+        startItem.setItemMeta(startMeta);
+        inv.setItem(startSlot, startItem);
+
+        ItemStack claimItem = configuredItem(researchSec.getConfigurationSection("icons.claim"), "CHEST", "&aClaim Finished");
+        inv.setItem(claimSlot, claimItem);
+
+        if (prevSlot >= 0) {
+            ItemStack prevItem = configuredItem(researchSec.getConfigurationSection("icons.prev"), "ARROW", "&aPrevious Page");
+            if (page <= 0) {
+                ItemMeta meta = prevItem.getItemMeta();
+                meta.displayName(pl.yourserver.scientistPlugin.util.Texts.legacy("&7No previous page"));
+                prevItem.setItemMeta(meta);
+            }
+            inv.setItem(prevSlot, prevItem);
+        }
+        if (nextSlot >= 0) {
+            ItemStack nextItem = configuredItem(researchSec.getConfigurationSection("icons.next"), "ARROW", "&aNext Page");
+            if (page >= maxPage) {
+                ItemMeta meta = nextItem.getItemMeta();
+                meta.displayName(pl.yourserver.scientistPlugin.util.Texts.legacy("&7No more pages"));
+                nextItem.setItemMeta(meta);
+            }
+            inv.setItem(nextSlot, nextItem);
         }
 
         presentInventory(p, "research", inv);
-    }
-
-    private int researchGridSlot(int index) {
-        // grid slots: 10..16 and 19..25 (2 rows x7)
-        int row = index / 7; int col = index % 7;
-        return (row == 0 ? 10 : 19) + col;
-    }
-
-    public void openRecipes(Player p) { recipePage.put(p.getUniqueId(), 0); renderRecipes(p); }
-
-    private void renderRecipes(Player p) {
-        FileConfiguration gui = plugin.getConfigManager().gui();
-        ConfigurationSection recipeSec = gui.getConfigurationSection("recipes");
-        String title = recipeSec.getString("title", "Recipe Book");
-        int size = recipeSec.getInt("size", 54);
-        Inventory inv = Bukkit.createInventory(p, size, Component.text(title));
-        ConfigurationSection layout = recipeSec.getConfigurationSection("layout");
-        int next = layout.getInt("next", 53);
-        int prev = layout.getInt("prev", 45);
-        java.util.Set<Integer> reserved = new java.util.HashSet<>();
-        reserved.add(next);
-        reserved.add(prev);
-        applyBackground(inv, recipeSec, reserved);
-        inv.setItem(next, configuredItem(recipeSec.getConfigurationSection("icons.next"), "ARROW", "&aNext"));
-        inv.setItem(prev, configuredItem(recipeSec.getConfigurationSection("icons.prev"), "ARROW", "&aPrev"));
-
-        var recSec = plugin.getConfigManager().recipes().getConfigurationSection("recipes");
-        if (recSec == null) return;
-        java.util.List<String> keys = new java.util.ArrayList<>(recSec.getKeys(false));
-        keys.sort(String::compareTo);
-        int page = recipePage.getOrDefault(p.getUniqueId(), 0);
-        int perPage = 28; // 4*7 grid
-        int from = page * perPage;
-        int to = Math.min(keys.size(), from + perPage);
-        var status = plugin.getResearchService().getPlayerRecipeStatus(p.getUniqueId());
-        Map<Integer, String> slotMap = new HashMap<>();
-        int placed = 0;
-        for (int i = from; i < to; i++) {
-            String key = keys.get(i);
-            var rs = recSec.getConfigurationSection(key);
-            String display = rs.getString("title", key);
-            String desc = rs.getString("description", "");
-            int needed = rs.getInt("experiments_to_unlock", 5);
-            var st = status.getOrDefault(key, new pl.yourserver.scientistPlugin.research.ResearchService.RecipeStatus(false, 0));
-            boolean unlocked = st.unlocked;
-            int done = st.experimentsDone;
-            java.util.List<String> reqs = rs.getStringList("requires");
-            ItemStack it = configuredItem(null, unlocked ? "BOOK" : "GRAY_DYE", (unlocked ? "&a" : "&7") + display);
-            ItemMeta meta = it.getItemMeta();
-            java.util.List<Component> lore = new java.util.ArrayList<>();
-            if (!desc.isEmpty()) lore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&7" + desc));
-            lore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&7Progress: &e" + done + "&7/&e" + needed));
-            if (reqs != null && !reqs.isEmpty()) {
-                lore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&7Requires:"));
-                for (String r : reqs) {
-                    boolean ru = status.getOrDefault(r, new pl.yourserver.scientistPlugin.research.ResearchService.RecipeStatus(false, 0)).unlocked;
-                    lore.add(pl.yourserver.scientistPlugin.util.Texts.legacy((ru ? "&a- " : "&c- ") + r));
-                }
-            }
-            if (unlocked) lore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&aClick: Open Abyssal Enchanting"));
-            meta.lore(lore);
-            it.setItemMeta(meta);
-            int slot = toGridSlot(placed);
-            inv.setItem(slot, it);
-            slotMap.put(slot, key);
-            placed++;
-        }
-        presentInventory(p, "recipes", inv);
-        recipeSlotMap.put(p.getUniqueId(), slotMap);
-    }
-
-    private int toGridSlot(int index) {
-        int row = index / 7; // 0..3
-        int col = index % 7; // 0..6
-        return (row == 0 ? 10 : row == 1 ? 19 : row == 2 ? 28 : 37) + col;
     }
 
     public void openAbyssal(Player p) {
@@ -210,18 +269,20 @@ public class GuiManager implements Listener {
         int reject = layout.getInt("reject", 40);
         int targetSlot = layout.getInt("target_slot", 20);
         int boneSlot = layout.getInt("bone_slot", 24);
-        java.util.Set<Integer> reserved = new java.util.HashSet<>();
+        Set<Integer> reserved = new HashSet<>();
         reserved.add(rollSlot);
         reserved.add(selectA);
         reserved.add(selectB);
         reserved.add(reject);
         reserved.add(targetSlot);
         reserved.add(boneSlot);
+        reserved.addAll(collectDecorSlots(abyssSec));
         applyBackground(inv, abyssSec, reserved);
-        inv.setItem(rollSlot, configuredItem(abyssSec.getConfigurationSection("icons.roll"), "ENDER_EYE", "&dRoll"));
-        inv.setItem(selectA, configuredItem(abyssSec.getConfigurationSection("icons.a"), "GREEN_DYE", "&aSelect A"));
-        inv.setItem(selectB, configuredItem(abyssSec.getConfigurationSection("icons.b"), "BLUE_DYE", "&9Select B"));
-        inv.setItem(reject, configuredItem(abyssSec.getConfigurationSection("icons.reject"), "BARRIER", "&cReject"));
+        applyDecor(inv, abyssSec);
+        inv.setItem(rollSlot, configuredItem(abyssSec.getConfigurationSection("icons.roll"), "ENDER_EYE", "&dEnchant"));
+        inv.setItem(selectA, configuredItem(abyssSec.getConfigurationSection("icons.a"), "GREEN_DYE", "&aOption A"));
+        inv.setItem(selectB, configuredItem(abyssSec.getConfigurationSection("icons.b"), "BLUE_DYE", "&9Option B"));
+        inv.setItem(reject, configuredItem(abyssSec.getConfigurationSection("icons.reject"), "BARRIER", "&cDiscard"));
 
         presentInventory(p, "abyssal", inv);
     }
@@ -235,13 +296,283 @@ public class GuiManager implements Listener {
         ConfigurationSection layout = confirmSec.getConfigurationSection("layout");
         int yes = layout.getInt("yes", 11);
         int no = layout.getInt("no", 15);
-        java.util.Set<Integer> reserved = new java.util.HashSet<>();
+        Set<Integer> reserved = new HashSet<>();
         reserved.add(yes);
         reserved.add(no);
+        reserved.addAll(collectDecorSlots(confirmSec));
         applyBackground(inv, confirmSec, reserved);
+        applyDecor(inv, confirmSec);
         inv.setItem(yes, configuredItem(confirmSec.getConfigurationSection("icons.yes"), "LIME_WOOL", "&aConfirm"));
         inv.setItem(no, configuredItem(confirmSec.getConfigurationSection("icons.no"), "RED_WOOL", "&cCancel"));
         presentInventory(p, "confirm", inv);
+    }
+
+    private ConfigurationSection iconSection(ConfigurationSection icons, String primary, String... fallbacks) {
+        if (icons == null) return null;
+        ConfigurationSection sec = icons.getConfigurationSection(primary);
+        if (sec != null) return sec;
+        if (fallbacks != null) {
+            for (String fb : fallbacks) {
+                sec = icons.getConfigurationSection(fb);
+                if (sec != null) return sec;
+            }
+        }
+        return null;
+    }
+
+    private Set<Integer> collectDecorSlots(ConfigurationSection section) {
+        Set<Integer> slots = new HashSet<>();
+        if (section == null) return slots;
+        ConfigurationSection decor = section.getConfigurationSection("decor");
+        if (decor == null) return slots;
+        for (String key : decor.getKeys(false)) {
+            try {
+                slots.add(Integer.parseInt(key));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return slots;
+    }
+
+    private void applyDecor(Inventory inv, ConfigurationSection section) {
+        if (section == null) return;
+        ConfigurationSection decor = section.getConfigurationSection("decor");
+        if (decor == null) return;
+        for (String key : decor.getKeys(false)) {
+            ConfigurationSection node = decor.getConfigurationSection(key);
+            if (node == null) continue;
+            int slot;
+            try {
+                slot = Integer.parseInt(key);
+            } catch (NumberFormatException ignored) {
+                continue;
+            }
+            inv.setItem(slot, configuredItem(node, "PAPER", ""));
+        }
+    }
+
+    private void runScientistShortcut(Player player) {
+        String command = plugin.getConfig().getString("shortcuts.scientist.command", "scientist");
+        if (command == null || command.isBlank()) {
+            command = "scientist";
+        }
+        if (command.startsWith("/")) {
+            command = command.substring(1);
+        }
+        String permission = plugin.getConfig().getString("shortcuts.scientist.permission", "mycraftingplugin.use");
+        PermissionAttachment attachment = player.addAttachment(plugin);
+        if (permission != null && !permission.isBlank()) {
+            attachment.setPermission(permission, true);
+        }
+        String finalCommand = command;
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            try {
+                player.performCommand(finalCommand);
+            } finally {
+                player.removeAttachment(attachment);
+            }
+        });
+    }
+    private int totalAvailable(Player player, String key, Map<String, Integer> cache) {
+        return cache.computeIfAbsent(key, k -> itemService.countTotal(player, k));
+    }
+
+    private ItemStack buildTemplateIcon(Player player,
+                                        ResearchService.TemplateView template,
+                                        boolean selected,
+                                        boolean hasAll,
+                                        Map<String, Integer> cache,
+                                        Map<String, ResearchService.RecipeStatus> status,
+                                        Collection<String> missingKeys) {
+        Material base;
+        if (template.running) {
+            base = Material.ENCHANTED_BOOK;
+        } else if (!template.prerequisitesMet) {
+            base = Material.BARRIER;
+        } else if (!hasAll) {
+            base = Material.PAPER;
+        } else {
+            base = Material.BOOK;
+        }
+        ItemStack item = new ItemStack(base);
+        ItemMeta meta = item.getItemMeta();
+        String color;
+        if (template.running) {
+            color = "&b";
+        } else if (!template.prerequisitesMet) {
+            color = "&c";
+        } else if (!template.unlocked) {
+            color = "&e";
+        } else {
+            color = "&a";
+        }
+        if (!hasAll && template.prerequisitesMet && !template.running) {
+            color = "&6";
+        }
+        meta.displayName(pl.yourserver.scientistPlugin.util.Texts.legacy(color + template.title));
+        List<Component> lore = new ArrayList<>();
+        if (template.description != null && !template.description.isEmpty()) {
+            lore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&7" + template.description));
+        }
+        lore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&7Duration: &f" + formatDuration(template.durationHours)));
+        lore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&7Progress: &f" + template.progress + "&7/&f" + template.unlockThreshold));
+        if (template.running) {
+            long remaining = Math.max(0, template.endEpoch - Instant.now().getEpochSecond());
+            lore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&bRunning: &f" + formatRemaining(remaining)));
+        } else if (!template.prerequisitesMet) {
+            lore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&cMissing prerequisites."));
+        }
+        if (!template.reagents.isEmpty()) {
+            Collection<String> missing = missingKeys == null ? Collections.emptySet() : missingKeys;
+            lore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&7Reagents:"));
+            for (Map.Entry<String, Integer> entry : template.reagents.entrySet()) {
+                int have = totalAvailable(player, entry.getKey(), cache);
+                boolean enough = !missing.contains(entry.getKey());
+                String pretty = pl.yourserver.scientistPlugin.util.Texts.prettyKey(entry.getKey());
+                lore.add(pl.yourserver.scientistPlugin.util.Texts.legacy((enough ? "&a" : "&c") + "- " + pretty + " &7(&f" + have + "&7/&f" + entry.getValue() + "&7)"));
+            }
+        }
+        if (template.requires != null && !template.requires.isEmpty()) {
+            lore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&7Prerequisites:"));
+            for (String req : template.requires) {
+                boolean unlocked = status.getOrDefault(req, new ResearchService.RecipeStatus(false, 0)).unlocked;
+                lore.add(pl.yourserver.scientistPlugin.util.Texts.legacy((unlocked ? "&a" : "&c") + "- " + req));
+            }
+        }
+        if (selected) {
+            lore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&bSelected"));
+        }
+        meta.lore(lore);
+        if (selected) {
+            meta.addEnchant(Enchantment.DURABILITY, 1, true);
+            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+        }
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    private String formatDuration(int hours) {
+        if (hours >= 24) {
+            int days = hours / 24;
+            int rem = hours % 24;
+            if (rem == 0) {
+                return days + "d";
+            }
+            return days + "d " + rem + "h";
+        }
+        return hours + "h";
+    }
+
+    private String formatRemaining(long seconds) {
+        long hours = seconds / 3600;
+        long minutes = (seconds % 3600) / 60;
+        long secs = seconds % 60;
+        if (hours > 0) {
+            return hours + "h " + minutes + "m";
+        }
+        if (minutes > 0) {
+            return minutes + "m " + secs + "s";
+        }
+        return secs + "s";
+    }
+
+    private int[] resolveTemplateSlots(List<Integer> configured) {
+        if (configured != null) {
+            List<Integer> filtered = new ArrayList<>();
+            for (Integer value : configured) {
+                if (value != null) {
+                    filtered.add(value);
+                }
+            }
+            if (!filtered.isEmpty() && filtered.size() % 3 == 0 && filtered.size() >= 18) {
+                int[] slots = new int[filtered.size()];
+                for (int i = 0; i < filtered.size(); i++) {
+                    slots[i] = filtered.get(i);
+                }
+                return slots;
+            }
+        }
+        return Arrays.copyOf(DEFAULT_TEMPLATE_SLOTS, DEFAULT_TEMPLATE_SLOTS.length);
+    }
+
+    private List<ColumnData> buildColumns(List<ResearchService.TemplateView> templates, int rows) {
+        List<ColumnData> columns = new ArrayList<>();
+        Map<String, ColumnData> map = new LinkedHashMap<>();
+        int effectiveRows = Math.max(1, rows);
+        for (ResearchService.TemplateView tmpl : templates) {
+            TierInfo info = parseTierInfo(tmpl.key);
+            int tierIdx = info.tier < 1 ? 0 : Math.min(info.tier, effectiveRows) - 1;
+            String columnKey;
+            if (rows <= 1 || info.tier < 1) {
+                columnKey = tmpl.key;
+            } else {
+                columnKey = info.baseKey.isEmpty() ? tmpl.key : info.baseKey;
+            }
+            ColumnData column = map.get(columnKey);
+            if (column == null) {
+                column = new ColumnData(effectiveRows);
+                map.put(columnKey, column);
+                columns.add(column);
+            }
+            if (column.rows[tierIdx] == null) {
+                column.rows[tierIdx] = tmpl;
+            } else {
+                String unique = columnKey;
+                int suffix = 1;
+                while (map.containsKey(unique)) {
+                    unique = columnKey + "#" + suffix++;
+                }
+                ColumnData extra = new ColumnData(effectiveRows);
+                extra.rows[tierIdx] = tmpl;
+                map.put(unique, extra);
+                columns.add(extra);
+            }
+        }
+        return columns;
+    }
+
+    private TierInfo parseTierInfo(String key) {
+        if (key == null || key.isEmpty()) {
+            return new TierInfo("", 0);
+        }
+        String upper = key.toUpperCase(Locale.ROOT);
+        if (upper.endsWith("_III")) {
+            return new TierInfo(key.substring(0, key.length() - 4), 3);
+        }
+        if (upper.endsWith("_II")) {
+            return new TierInfo(key.substring(0, key.length() - 3), 2);
+        }
+        if (upper.endsWith("_I")) {
+            return new TierInfo(key.substring(0, key.length() - 2), 1);
+        }
+        if (upper.endsWith("_T3")) {
+            return new TierInfo(key.substring(0, key.length() - 3), 3);
+        }
+        if (upper.endsWith("_T2")) {
+            return new TierInfo(key.substring(0, key.length() - 3), 2);
+        }
+        if (upper.endsWith("_T1")) {
+            return new TierInfo(key.substring(0, key.length() - 3), 1);
+        }
+        return new TierInfo(key, 1);
+    }
+
+    private static final class TierInfo {
+        final String baseKey;
+        final int tier;
+
+        TierInfo(String baseKey, int tier) {
+            this.baseKey = baseKey == null ? "" : baseKey;
+            this.tier = tier;
+        }
+    }
+
+    private static final class ColumnData {
+        final ResearchService.TemplateView[] rows;
+
+        ColumnData(int rowsCount) {
+            this.rows = new ResearchService.TemplateView[Math.max(1, rowsCount)];
+        }
     }
 
     private ItemStack configuredItem(ConfigurationSection sec, String fallbackMaterial, String fallbackName) {
@@ -254,7 +585,7 @@ public class GuiManager implements Listener {
         if (mat == null) mat = Material.PAPER;
         ItemStack it = new ItemStack(mat);
         ItemMeta meta = it.getItemMeta();
-        if (display != null && !display.isEmpty()) {
+        if (display != null) {
             meta.displayName(pl.yourserver.scientistPlugin.util.Texts.legacy(display));
         }
         if (sec != null && sec.contains("model")) {
@@ -282,6 +613,50 @@ public class GuiManager implements Listener {
         return true;
     }
 
+    private void handleAbyssalSlotUpdate(Player player, Inventory inv) {
+        FileConfiguration gui = plugin.getConfigManager().gui();
+        ConfigurationSection layout = gui.getConfigurationSection("abyssal.layout");
+        if (layout == null) {
+            return;
+        }
+        int targetSlot = layout.getInt("target_slot", 20);
+        int boneSlot = layout.getInt("bone_slot", 24);
+        int selectA = layout.getInt("select_a", 30);
+        int selectB = layout.getInt("select_b", 32);
+        UUID uid = player.getUniqueId();
+
+        ItemStack target = inv.getItem(targetSlot);
+        ItemStack bone = inv.getItem(boneSlot);
+
+        if (target != null && !target.getType().isAir() && target.getAmount() > 1) {
+            ItemStack overflow = target.clone();
+            overflow.setAmount(target.getAmount() - 1);
+            target.setAmount(1);
+            inv.setItem(targetSlot, target);
+            Map<Integer, ItemStack> leftover = player.getInventory().addItem(overflow);
+            leftover.values().forEach(rem -> player.getWorld().dropItemNaturally(player.getLocation(), rem));
+            sendMessage(player, "abyssal_single_target", "&7Only one item can be enchanted at a time. Extras returned.");
+        }
+
+        if (bone != null && !bone.getType().isAir() && bone.getAmount() > 1) {
+            ItemStack overflow = bone.clone();
+            overflow.setAmount(bone.getAmount() - 1);
+            bone.setAmount(1);
+            inv.setItem(boneSlot, bone);
+            Map<Integer, ItemStack> leftover = player.getInventory().addItem(overflow);
+            leftover.values().forEach(rem -> player.getWorld().dropItemNaturally(player.getLocation(), rem));
+            sendMessage(player, "abyssal_single_bone", "&7Only one bone can be used per roll. Extras returned.");
+        }
+
+        pendingChoice.remove(uid);
+        RollState previous = rollStates.remove(uid);
+        if (previous != null) {
+            ConfigurationSection icons = gui.getConfigurationSection("abyssal.icons");
+            inv.setItem(selectA, configuredItem(icons == null ? null : icons.getConfigurationSection("a"), "GREEN_DYE", "&aOption A"));
+            inv.setItem(selectB, configuredItem(icons == null ? null : icons.getConfigurationSection("b"), "BLUE_DYE", "&9Option B"));
+        }
+    }
+
     @EventHandler
     public void onClick(InventoryClickEvent e) {
         HumanEntity he = e.getWhoClicked();
@@ -303,68 +678,78 @@ public class GuiManager implements Listener {
         switch (ctx) {
             case "main" -> {
                 int rs = gui.getInt("main.layout.research_slot", 11);
-                int rcs = gui.getInt("main.layout.recipe_slot", 13);
+                int cs = gui.contains("main.layout.crafting_slot")
+                        ? gui.getInt("main.layout.crafting_slot")
+                        : gui.getInt("main.layout.recipe_slot", 13);
                 int as = gui.getInt("main.layout.abyssal_slot", 15);
                 int help = gui.getInt("main.layout.help_slot", 26);
-                if (rawSlot == rs) openResearch(p);
-                if (rawSlot == rcs) openRecipes(p);
-                if (rawSlot == as) openAbyssal(p);
-                if (rawSlot == help) sendHelp(p);
+                if (rawSlot == rs) {
+                    openResearch(p);
+                } else if (rawSlot == cs) {
+                    p.closeInventory();
+                    sendMessage(p, "open_crafting_shortcut", "&aOpening Scientist crafting...");
+                    runScientistShortcut(p);
+                } else if (rawSlot == as) {
+                    openAbyssal(p);
+                } else if (rawSlot == help) {
+                    sendHelp(p);
+                }
             }
             case "research" -> {
+                if (!topClick) {
+                    e.setCancelled(true);
+                    return;
+                }
                 ConfigurationSection layout = gui.getConfigurationSection("research.layout");
                 int start = layout.getInt("start_button", 40);
-                int claimSlot = layout.getInt("claim_button", 41);
-                int[] inputSlots = layout.getIntegerList("input_slots").stream().mapToInt(i -> i).toArray();
-                if (!topClick) {
-                    if (e.getAction() == org.bukkit.event.inventory.InventoryAction.MOVE_TO_OTHER_INVENTORY) {
-                        if (handleResearchShiftClick(e, inputSlots)) {
-                            return;
+                int claim = layout.getInt("claim_button", 41);
+                int prev = layout.getInt("prev_button", 36);
+                int next = layout.getInt("next_button", 44);
+                Set<Integer> templateSlots = new HashSet<>(layout.getIntegerList("template_slots"));
+                if (templateSlots.isEmpty()) {
+                    templateSlots.addAll(Arrays.asList(10, 11, 12, 19, 20, 21, 28, 29, 30));
+                }
+                UUID uid = p.getUniqueId();
+
+                if (rawSlot == start) {
+                    String selectedKey = selectedResearch.get(uid);
+                    if (selectedKey == null) {
+                        sendMessage(p, "research_select_first", "&cSelect an experiment first.");
+                    } else {
+                        if (plugin.getResearchService().attemptStart(p, selectedKey)) {
+                            selectedResearch.put(uid, selectedKey);
                         }
                     }
-                    cancel = false;
-                    break;
-                }
-                if (rawSlot == start) {
-                    plugin.getResearchService().attemptStart(p, e.getInventory());
                     renderResearch(p);
                     return;
                 }
-                if (rawSlot == claimSlot) {
+                if (rawSlot == claim) {
                     plugin.getResearchService().claimFinished(p);
                     renderResearch(p);
                     return;
                 }
-                for (int slot : inputSlots) {
-                    if (rawSlot == slot) {
-                        cancel = false;
-                        break;
-                    }
+                if (rawSlot == prev) {
+                    researchPage.put(uid, Math.max(0, researchPage.getOrDefault(uid, 0) - 1));
+                    renderResearch(p);
+                    return;
                 }
-            }
-            case "recipes" -> {
-                int next = gui.getInt("recipes.layout.next", 53);
-                int prev = gui.getInt("recipes.layout.prev", 45);
-                int page = recipePage.getOrDefault(p.getUniqueId(), 0);
-                var recSec = plugin.getConfigManager().recipes().getConfigurationSection("recipes");
-                int total = recSec != null ? recSec.getKeys(false).size() : 0;
-                int perPage = 28;
-                int maxPage = Math.max(0, (total - 1) / perPage);
                 if (rawSlot == next) {
-                    if (page < maxPage) recipePage.put(p.getUniqueId(), page + 1);
-                    renderRecipes(p);
-                } else if (rawSlot == prev) {
-                    if (page > 0) recipePage.put(p.getUniqueId(), page - 1);
-                    renderRecipes(p);
-                } else {
-                    String key = recipeSlotMap.getOrDefault(p.getUniqueId(), java.util.Collections.emptyMap()).get(rawSlot);
-                    if (key != null) {
-                        var status = plugin.getResearchService().getPlayerRecipeStatus(p.getUniqueId());
-                        boolean unlocked = status.getOrDefault(key, new pl.yourserver.scientistPlugin.research.ResearchService.RecipeStatus(false, 0)).unlocked;
-                        if (unlocked) openAbyssal(p);
-                    }
+                    researchPage.put(uid, researchPage.getOrDefault(uid, 0) + 1);
+                    renderResearch(p);
+                    return;
                 }
+                if (templateSlots.contains(rawSlot)) {
+                    String key = researchSlotMap.getOrDefault(uid, Collections.emptyMap()).get(rawSlot);
+                    if (key != null) {
+                        selectedResearch.put(uid, key);
+                        renderResearch(p);
+                    }
+                    e.setCancelled(true);
+                    return;
+                }
+                e.setCancelled(true);
             }
+
             case "abyssal" -> {
                 ConfigurationSection layout = gui.getConfigurationSection("abyssal.layout");
                 int roll = layout.getInt("roll_button", 31);
@@ -373,8 +758,14 @@ public class GuiManager implements Listener {
                 int reject = layout.getInt("reject", 40);
                 int targetSlot = layout.getInt("target_slot", 20);
                 int boneSlot = layout.getInt("bone_slot", 24);
-                if (topClick && (rawSlot == targetSlot || rawSlot == boneSlot)) {
+                boolean slotInteraction = rawSlot == targetSlot || rawSlot == boneSlot;
+                if (topClick && slotInteraction) {
                     cancel = false;
+                    Bukkit.getScheduler().runTask(plugin, () -> handleAbyssalSlotUpdate(p, top));
+                } else if (!topClick && (e.getAction() == InventoryAction.MOVE_TO_OTHER_INVENTORY
+                        || e.getAction() == InventoryAction.HOTBAR_SWAP
+                        || e.getAction() == InventoryAction.HOTBAR_MOVE_AND_READD)) {
+                    Bukkit.getScheduler().runTask(plugin, () -> handleAbyssalSlotUpdate(p, top));
                 }
                 if (rawSlot == roll) {
                     plugin.getAbyssalService().rollOptions(p, e.getInventory(), rollStates);
@@ -420,7 +811,7 @@ public class GuiManager implements Listener {
         e.setCancelled(cancel);
     }
 
-    @EventHandler
+        @EventHandler
     public void onDrag(InventoryDragEvent e) {
         UUID id = e.getWhoClicked().getUniqueId();
         Inventory top = e.getView().getTopInventory();
@@ -429,25 +820,26 @@ public class GuiManager implements Listener {
             return;
         }
         String ctx = openGui.get(id);
-        if (ctx == null) return;
-        int size = top.getSize();
-        FileConfiguration gui = plugin.getConfigManager().gui();
-        java.util.Set<Integer> allowed = new java.util.HashSet<>();
-        if (ctx.equals("research")) {
-            allowed.addAll(gui.getIntegerList("research.layout.input_slots"));
-        } else if (ctx.equals("abyssal")) {
-            ConfigurationSection layout = gui.getConfigurationSection("abyssal.layout");
-            allowed.add(layout.getInt("target_slot", 20));
-            allowed.add(layout.getInt("bone_slot", 24));
-        } else {
-            e.setCancelled(true);
+        if (ctx == null) {
             return;
         }
-        for (int slot : e.getRawSlots()) {
-            if (slot < size && !allowed.contains(slot)) {
-                e.setCancelled(true);
-                return;
+        if (ctx.equals("abyssal")) {
+            FileConfiguration gui = plugin.getConfigManager().gui();
+            ConfigurationSection layout = gui.getConfigurationSection("abyssal.layout");
+            Set<Integer> allowed = new HashSet<>();
+            allowed.add(layout.getInt("target_slot", 20));
+            allowed.add(layout.getInt("bone_slot", 24));
+            for (int slot : e.getRawSlots()) {
+                if (slot < top.getSize() && !allowed.contains(slot)) {
+                    e.setCancelled(true);
+                    return;
+                }
             }
+            if (e.getWhoClicked() instanceof Player player) {
+                Bukkit.getScheduler().runTask(plugin, () -> handleAbyssalSlotUpdate(player, top));
+            }
+        } else {
+            e.setCancelled(true);
         }
     }
 
@@ -461,10 +853,13 @@ public class GuiManager implements Listener {
 
         activeInventories.remove(id);
         String ctx = openGui.remove(id);
-        if (!(e.getPlayer() instanceof Player p)) {
+
+        if (!(e.getPlayer() instanceof Player player)) {
             rollStates.remove(id);
             pendingChoice.remove(id);
-            recipeSlotMap.remove(id);
+            selectedResearch.remove(id);
+            researchSlotMap.remove(id);
+            researchPage.remove(id);
             return;
         }
 
@@ -472,7 +867,9 @@ public class GuiManager implements Listener {
         if (ctx == null) {
             rollStates.remove(id);
             pendingChoice.remove(id);
-            recipeSlotMap.remove(id);
+            selectedResearch.remove(id);
+            researchSlotMap.remove(id);
+            researchPage.remove(id);
             return;
         }
 
@@ -481,18 +878,18 @@ public class GuiManager implements Listener {
             if (pending != null) {
                 RollState st = rollStates.get(id);
                 if (st != null && st.invRef != null) {
-                    presentInventoryLater(p, "abyssal", st.invRef);
+                    presentInventoryLater(player, "abyssal", st.invRef);
                 }
             }
             return;
         }
 
-        recipeSlotMap.remove(id);
         pendingChoice.remove(id);
 
         if (ctx.equals("research")) {
-            int[] slots = gui.getIntegerList("research.layout.input_slots").stream().mapToInt(i -> i).toArray();
-            refundSlots(p, e.getInventory(), slots);
+            selectedResearch.remove(id);
+            researchSlotMap.remove(id);
+            researchPage.remove(id);
             rollStates.remove(id);
             return;
         }
@@ -500,7 +897,7 @@ public class GuiManager implements Listener {
         if (ctx.equals("abyssal")) {
             ConfigurationSection layout = gui.getConfigurationSection("abyssal.layout");
             int[] slots = new int[]{ layout.getInt("target_slot", 20), layout.getInt("bone_slot", 24) };
-            refundSlots(p, e.getInventory(), slots);
+            refundSlots(player, e.getInventory(), slots);
             rollStates.remove(id);
             return;
         }
@@ -516,12 +913,11 @@ public class GuiManager implements Listener {
         public String category;
         public Inventory invRef;
     }
-
-    private void applyBackground(Inventory inv, ConfigurationSection section, java.util.Set<Integer> reserved) {
+    private void applyBackground(Inventory inv, ConfigurationSection section, Set<Integer> reserved) {
         if (section == null) return;
         ConfigurationSection bg = section.getConfigurationSection("background");
         if (bg == null) return;
-        ItemStack filler = configuredItem(bg, "GRAY_STAINED_GLASS_PANE", " ");
+        ItemStack filler = configuredItem(bg, "GRAY_STAINED_GLASS_PANE", "");
         for (int i = 0; i < inv.getSize(); i++) {
             if (reserved.contains(i)) continue;
             inv.setItem(i, filler.clone());
@@ -536,7 +932,7 @@ public class GuiManager implements Listener {
     }
 
     private void sendHelp(Player p) {
-        java.util.List<String> lines = plugin.getConfigManager().messages().getStringList("help_lines");
+        List<String> lines = plugin.getConfigManager().messages().getStringList("help_lines");
         if (lines == null || lines.isEmpty()) {
             sendMessage(p, "help_fallback", "&7Submit reagents to begin research and unlock recipes.");
             return;
@@ -547,45 +943,13 @@ public class GuiManager implements Listener {
         }
     }
 
-    private boolean handleResearchShiftClick(InventoryClickEvent e, int[] inputSlots) {
-        ItemStack moving = e.getCurrentItem();
-        if (moving == null || moving.getType().isAir()) return false;
-        String key = itemService.readKey(moving).orElse(null);
-        if (key == null) return false;
-        Inventory top = e.getView().getTopInventory();
-        for (int slot : inputSlots) {
-            ItemStack existing = top.getItem(slot);
-            if (existing == null || existing.getType().isAir()) {
-                top.setItem(slot, moving.clone());
-                e.getClickedInventory().setItem(e.getSlot(), null);
-                e.setCancelled(true);
-                return true;
-            }
-            String existingKey = itemService.readKey(existing).orElse(null);
-            if (existingKey != null && existingKey.equals(key) && existing.getAmount() < existing.getMaxStackSize()) {
-                int transfer = Math.min(existing.getMaxStackSize() - existing.getAmount(), moving.getAmount());
-                existing.setAmount(existing.getAmount() + transfer);
-                moving.setAmount(moving.getAmount() - transfer);
-                top.setItem(slot, existing);
-                if (moving.getAmount() <= 0) {
-                    e.getClickedInventory().setItem(e.getSlot(), null);
-                } else {
-                    e.getClickedInventory().setItem(e.getSlot(), moving);
-                }
-                e.setCancelled(true);
-                return true;
-            }
-        }
-        return false;
-    }
-
     private void refundSlots(Player player, Inventory inv, int[] slots) {
         for (int slot : slots) {
             if (slot < 0 || slot >= inv.getSize()) continue;
             ItemStack item = inv.getItem(slot);
             if (item == null || item.getType().isAir()) continue;
             inv.setItem(slot, null);
-            java.util.Map<Integer, ItemStack> leftover = player.getInventory().addItem(item);
+            Map<Integer, ItemStack> leftover = player.getInventory().addItem(item);
             leftover.values().forEach(rem -> player.getWorld().dropItemNaturally(player.getLocation(), rem));
         }
     }

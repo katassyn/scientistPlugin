@@ -5,8 +5,6 @@ import org.bukkit.Bukkit;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.ItemStack;
 import pl.yourserver.scientistPlugin.ScientistPlugin;
 import pl.yourserver.scientistPlugin.item.ItemService;
 
@@ -43,132 +41,205 @@ public class ResearchService {
         if (taskId != -1) Bukkit.getScheduler().cancelTask(taskId);
     }
 
-    public void attemptStart(Player p, Inventory inv) {
-        FileConfiguration gui = plugin.getConfigManager().gui();
-        FileConfiguration recipesCfg = plugin.getConfigManager().recipes();
-        int[] slots = gui.getIntegerList("research.layout.input_slots").stream().mapToInt(i -> i).toArray();
-        Map<String, Integer> counts = new HashMap<>();
-
-        for (int s : slots) {
-            ItemStack it = inv.getItem(s);
-            if (it == null || it.getType().isAir()) continue;
-            String key = itemService.readKey(it).orElse(null);
-            if (key == null) continue;
-            counts.merge(key, it.getAmount(), Integer::sum);
+    public boolean attemptStart(Player player, String recipeKey) {
+        if (player == null || recipeKey == null || recipeKey.isEmpty()) {
+            return false;
         }
 
-        // Concurrency check
-        int running = 0;
-        try (Connection c = plugin.getDatabase().getConnection();
-             PreparedStatement ps = c.prepareStatement("SELECT COUNT(*) FROM sci_experiment WHERE player_uuid=UNHEX(REPLACE(?,'-','')) AND status='RUNNING'")) {
-            ps.setString(1, p.getUniqueId().toString());
-            try (ResultSet rs = ps.executeQuery()) { if (rs.next()) running = rs.getInt(1); }
-        } catch (SQLException e) { e.printStackTrace(); }
-        int maxConc = plugin.getConfig().getInt("experiments.max_concurrent_per_player", 2);
+        FileConfiguration recipesCfg = plugin.getConfigManager().recipes();
+        ConfigurationSection recipe = recipesCfg.getConfigurationSection("recipes." + recipeKey);
+        if (recipe == null) {
+            String text = plugin.getConfigManager().messages().getString("experiment_no_match", "&cNo matching experiment for these reagents or prerequisites not met.");
+            player.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(text));
+            return false;
+        }
+
+        Map<String, RecipeStatus> status = getPlayerRecipeStatus(player.getUniqueId());
+        if (!prerequisitesMet(status, recipe)) {
+            List<String> reqs = recipe.getStringList("requires");
+            String missing = (reqs == null || reqs.isEmpty()) ? recipeKey : String.join(", ", reqs);
+            String text = plugin.getConfigManager().messages().getString("experiment_prereq", "&cYou must unlock previous tier first: {key}");
+            text = text.replace("{key}", missing);
+            player.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(text));
+            return false;
+        }
+
+        int running = countRunningExperiments(player.getUniqueId());
+        int maxConc = plugin.getConfig().getInt("experiments.max_concurrent_per_player", 1);
         if (running >= maxConc) {
             String text = plugin.getConfigManager().messages().getString("experiments_max_reached", "&cYou have reached the maximum concurrent experiments.");
-            p.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(text));
-            return;
+            player.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(text));
+            return false;
         }
 
-        // Find first recipe we can satisfy (and prerequisites met)
-        ConfigurationSection recs = recipesCfg.getConfigurationSection("recipes");
-        if (recs == null) return;
-        String chosenKey = null;
-        int durationHours = plugin.getConfig().getInt("experiments.default_duration_hours", 4);
-        for (String rKey : recs.getKeys(false)) {
-            ConfigurationSection rs = recs.getConfigurationSection(rKey);
-            ConfigurationSection req = rs.getConfigurationSection("reagents");
-            boolean ok = true;
-            for (String k : req.getKeys(false)) {
-                int need = req.getInt(k);
-                int have = counts.getOrDefault(k, 0);
-                if (have < need) { ok = false; break; }
-            }
-            if (ok && prerequisitesMet(p.getUniqueId(), rs)) {
-                chosenKey = rKey;
-                durationHours = rs.getInt("duration_hours", durationHours);
-                break;
+        ConfigurationSection reagentsSec = recipe.getConfigurationSection("reagents");
+        Map<String, Integer> reagents = new LinkedHashMap<>();
+        if (reagentsSec != null) {
+            for (String key : reagentsSec.getKeys(false)) {
+                reagents.put(key, Math.max(0, reagentsSec.getInt(key)));
             }
         }
-        if (chosenKey == null) {
-            String text = plugin.getConfigManager().messages().getString("experiment_no_match", "&cNo matching experiment for these reagents or prerequisites not met.");
-            p.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(text));
-            return;
+
+        Map<String, Integer> shortages = new LinkedHashMap<>();
+        for (Map.Entry<String, Integer> entry : reagents.entrySet()) {
+            int have = itemService.countTotal(player, entry.getKey());
+            if (have < entry.getValue()) {
+                shortages.put(entry.getKey(), entry.getValue() - have);
+            }
+        }
+        if (!shortages.isEmpty()) {
+            StringBuilder sb = new StringBuilder();
+            shortages.forEach((key, miss) -> sb.append(key).append(" x").append(miss).append(", "));
+            if (sb.length() > 2) {
+                sb.setLength(sb.length() - 2);
+            }
+            String text = plugin.getConfigManager().messages().getString("experiment_missing_reagents", "&cMissing reagents: {items}");
+            text = text.replace("{items}", sb.toString());
+            player.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(text));
+            return false;
         }
 
-        // Remove items from inventory slots
-        ConfigurationSection req = recs.getConfigurationSection(chosenKey).getConfigurationSection("reagents");
-        Map<String, Integer> toRemove = new HashMap<>();
-        req.getKeys(false).forEach(k -> toRemove.put(k, req.getInt(k)));
-        for (int s : slots) {
-            if (toRemove.isEmpty()) break;
-            ItemStack it = inv.getItem(s);
-            if (it == null || it.getType().isAir()) continue;
-            String k = itemService.readKey(it).orElse(null);
-            if (k == null || !toRemove.containsKey(k)) continue;
-            int need = toRemove.get(k);
-            int take = Math.min(need, it.getAmount());
-            it.setAmount(it.getAmount() - take);
-            need -= take;
-            if (need <= 0) toRemove.remove(k); else toRemove.put(k, need);
-            inv.setItem(s, it.getAmount() <= 0 ? null : it);
+        if (!itemService.withdrawReagents(player, reagents)) {
+            String text = plugin.getConfigManager().messages().getString("experiment_withdraw_failed", "&cCould not withdraw reagents. Try again.");
+            player.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(text));
+            return false;
         }
 
-        // Insert DB row
-        boolean debug = plugin.getConfig().getBoolean("debug.mode", false);
-        long endAt = Instant.now().plusSeconds(debug ? plugin.getConfig().getLong("debug.short_experiments_seconds", 5L) : durationHours * 3600L).getEpochSecond();
-        Map<String, Integer> reagentsUsed = new HashMap<>();
-        req.getKeys(false).forEach(k -> reagentsUsed.put(k, req.getInt(k)));
+        int durationHours = recipe.getInt("duration_hours", plugin.getConfig().getInt("experiments.default_duration_hours", 4));
+        long start = Instant.now().getEpochSecond();
+        long endAt = start + durationHours * 3600L;
+
+        Map<String, Integer> reagentsUsed = new LinkedHashMap<>(reagents);
         try (Connection c = plugin.getDatabase().getConnection()) {
-            // ensure recipe exists
-            try (PreparedStatement ps = c.prepareStatement("INSERT IGNORE INTO sci_recipe (recipe_key,title,description) VALUES (?,?,?)")) {
-                String title = recs.getConfigurationSection(chosenKey).getString("title", chosenKey);
-                String desc = recs.getConfigurationSection(chosenKey).getString("description", "");
-                ps.setString(1, chosenKey);
+            String title = recipe.getString("title", recipeKey);
+            String desc = recipe.getString("description", "");
+            try (PreparedStatement ps = c.prepareStatement("INSERT INTO sci_experiment_log (player_uuid, recipe_key, started_at, metadata) VALUES (UNHEX(REPLACE(?,'-','')), ?, NOW(), ?)")) {
+                ps.setString(1, player.getUniqueId().toString());
                 ps.setString(2, title);
                 ps.setString(3, desc);
                 ps.executeUpdate();
             }
             try (PreparedStatement ps = c.prepareStatement("INSERT INTO sci_experiment (player_uuid,recipe_key,started_at,end_at,status,reagents_json) VALUES (UNHEX(REPLACE(?,'-','')),?,FROM_UNIXTIME(?),FROM_UNIXTIME(?),'RUNNING',?)")) {
-                ps.setString(1, p.getUniqueId().toString());
-                ps.setString(2, chosenKey);
-                ps.setLong(3, Instant.now().getEpochSecond());
+                ps.setString(1, player.getUniqueId().toString());
+                ps.setString(2, recipeKey);
+                ps.setLong(3, start);
                 ps.setLong(4, endAt);
                 ps.setString(5, gson.toJson(reagentsUsed));
                 ps.executeUpdate();
             }
         } catch (SQLException e) {
             e.printStackTrace();
+            return false;
         }
 
-        String title = recs.getConfigurationSection(chosenKey).getString("title", chosenKey);
+        String title = recipe.getString("title", recipeKey);
         final String sendTitle = title;
         final int sendHours = durationHours;
         plugin.getServer().getScheduler().runTask(plugin, () -> {
             String msgText = plugin.getConfigManager().messages().getString("experiment_started", "Experiment started");
             msgText = msgText.replace("{recipe}", sendTitle).replace("{hours}", String.valueOf(sendHours));
-            p.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(msgText));
+            player.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(msgText));
         });
+        return true;
     }
 
-    private boolean prerequisitesMet(UUID uuid, ConfigurationSection recipeSection) {
-        List<String> reqs = recipeSection.getStringList("requires");
-        if (reqs == null || reqs.isEmpty()) return true;
-        try (Connection c = plugin.getDatabase().getConnection();
-             PreparedStatement ps = c.prepareStatement("SELECT unlocked FROM sci_player_recipe WHERE player_uuid=UNHEX(REPLACE(?,'-','')) AND recipe_key=? LIMIT 1")) {
-            for (String key : reqs) {
-                ps.setString(1, uuid.toString());
-                ps.setString(2, key);
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (!rs.next() || rs.getInt(1) != 1) return false;
+    public List<TemplateView> buildTemplates(UUID uuid) {
+        List<TemplateView> templates = new ArrayList<>();
+        FileConfiguration recipesCfg = plugin.getConfigManager().recipes();
+        ConfigurationSection recSec = recipesCfg.getConfigurationSection("recipes");
+        if (recSec == null) {
+            return templates;
+        }
+        Map<String, RecipeStatus> status = getPlayerRecipeStatus(uuid);
+        Map<String, ActiveExperiment> running = getRunningExperiments(uuid);
+        for (String key : recSec.getKeys(false)) {
+            ConfigurationSection recipe = recSec.getConfigurationSection(key);
+            LinkedHashMap<String, Integer> reagents = new LinkedHashMap<>();
+            ConfigurationSection reagSec = recipe.getConfigurationSection("reagents");
+            if (reagSec != null) {
+                for (String reagentKey : reagSec.getKeys(false)) {
+                    reagents.put(reagentKey, Math.max(0, reagSec.getInt(reagentKey)));
                 }
             }
-            return true;
+            List<String> requires = recipe.getStringList("requires");
+            RecipeStatus rs = status.getOrDefault(key, new RecipeStatus(false, 0));
+            boolean prereq = prerequisitesMet(status, recipe);
+            ActiveExperiment active = running.get(key);
+            templates.add(new TemplateView(
+                    key,
+                    recipe.getString("title", key),
+                    recipe.getString("description", ""),
+                    reagents,
+                    requires == null ? Collections.emptyList() : requires,
+                    recipe.getInt("duration_hours", plugin.getConfig().getInt("experiments.default_duration_hours", 4)),
+                    recipe.getInt("experiments_to_unlock", 5),
+                    rs.experimentsDone,
+                    rs.unlocked,
+                    prereq,
+                    active != null,
+                    active != null ? active.endEpoch : 0L
+            ));
+        }
+        return templates;
+    }
+
+    public Map<String, String> getRecipeTitles() {
+        Map<String, String> titles = new LinkedHashMap<>();
+        FileConfiguration recipesCfg = plugin.getConfigManager().recipes();
+        ConfigurationSection recSec = recipesCfg.getConfigurationSection("recipes");
+        if (recSec == null) {
+            return titles;
+        }
+        for (String key : recSec.getKeys(false)) {
+            ConfigurationSection recipe = recSec.getConfigurationSection(key);
+            titles.put(key, recipe.getString("title", key));
+        }
+        return titles;
+    }
+
+    private Map<String, ActiveExperiment> getRunningExperiments(UUID uuid) {
+        Map<String, ActiveExperiment> map = new HashMap<>();
+        try (Connection c = plugin.getDatabase().getConnection();
+             PreparedStatement ps = c.prepareStatement("SELECT recipe_key, UNIX_TIMESTAMP(end_at) end_ts FROM sci_experiment WHERE player_uuid=UNHEX(REPLACE(?,'-','')) AND status='RUNNING'")) {
+            ps.setString(1, uuid.toString());
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    map.put(rs.getString("recipe_key"), new ActiveExperiment(rs.getString("recipe_key"), rs.getLong("end_ts")));
+                }
+            }
         } catch (SQLException e) {
             e.printStackTrace();
-            return false;
         }
+        return map;
+    }
+
+    private int countRunningExperiments(UUID uuid) {
+        try (Connection c = plugin.getDatabase().getConnection();
+             PreparedStatement ps = c.prepareStatement("SELECT COUNT(*) FROM sci_experiment WHERE player_uuid=UNHEX(REPLACE(?,'-','')) AND status='RUNNING'")) {
+            ps.setString(1, uuid.toString());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return 0;
+    }
+
+    private boolean prerequisitesMet(Map<String, RecipeStatus> statusMap, ConfigurationSection recipeSection) {
+        List<String> reqs = recipeSection.getStringList("requires");
+        if (reqs == null || reqs.isEmpty()) {
+            return true;
+        }
+        for (String key : reqs) {
+            RecipeStatus st = statusMap.get(key);
+            if (st == null || !st.unlocked) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public void sendProgress(Player p) {
@@ -244,6 +315,50 @@ public class ResearchService {
         }
     }
 
+    public static class TemplateView {
+        public final String key;
+        public final String title;
+        public final String description;
+        public final Map<String, Integer> reagents;
+        public final List<String> requires;
+        public final int durationHours;
+        public final int unlockThreshold;
+        public final int progress;
+        public final boolean unlocked;
+        public final boolean prerequisitesMet;
+        public final boolean running;
+        public final long endEpoch;
+
+        public TemplateView(String key, String title, String description,
+                             Map<String, Integer> reagents, List<String> requires,
+                             int durationHours, int unlockThreshold,
+                             int progress, boolean unlocked, boolean prerequisitesMet,
+                             boolean running, long endEpoch) {
+            this.key = key;
+            this.title = title;
+            this.description = description;
+            this.reagents = reagents;
+            this.requires = requires;
+            this.durationHours = durationHours;
+            this.unlockThreshold = unlockThreshold;
+            this.progress = progress;
+            this.unlocked = unlocked;
+            this.prerequisitesMet = prerequisitesMet;
+            this.running = running;
+            this.endEpoch = endEpoch;
+        }
+    }
+
+    public static class ActiveExperiment {
+        public final String recipeKey;
+        public final long endEpoch;
+
+        public ActiveExperiment(String recipeKey, long endEpoch) {
+            this.recipeKey = recipeKey;
+            this.endEpoch = endEpoch;
+        }
+    }
+
     public static class UIExperiment {
         public final String recipeKey;
         public final String status;
@@ -253,8 +368,8 @@ public class ResearchService {
         }
     }
 
-    public java.util.List<UIExperiment> listExperiments(UUID uuid, int limit) {
-        java.util.List<UIExperiment> list = new java.util.ArrayList<>();
+    public List<UIExperiment> listExperiments(UUID uuid, int limit) {
+        List<UIExperiment> list = new ArrayList<>();
         try (Connection c = plugin.getDatabase().getConnection();
              PreparedStatement ps = c.prepareStatement("SELECT recipe_key, status, UNIX_TIMESTAMP(end_at) end_ts FROM sci_experiment WHERE player_uuid = UNHEX(REPLACE(?,'-','')) ORDER BY id DESC LIMIT ?")) {
             ps.setString(1, uuid.toString());
@@ -269,7 +384,7 @@ public class ResearchService {
     /**
      * Fetch per-player recipe status map (unlocked flag and experiments_done)
      */
-    public Map<String, RecipeStatus> getPlayerRecipeStatus(java.util.UUID uuid) {
+    public Map<String, RecipeStatus> getPlayerRecipeStatus(UUID uuid) {
         Map<String, RecipeStatus> map = new HashMap<>();
         try (Connection c = plugin.getDatabase().getConnection();
              PreparedStatement ps = c.prepareStatement("SELECT recipe_key, unlocked, experiments_done FROM sci_player_recipe WHERE player_uuid=UNHEX(REPLACE(?,'-',''))")) {
@@ -297,3 +412,4 @@ public class ResearchService {
         }
     }
 }
+

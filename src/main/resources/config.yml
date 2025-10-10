@@ -138,3 +138,8 @@ debug:
   default_reagents:
     - void_shard_I
     - soul_residue_I
+shortcuts:
+  scientist:
+    command: "scientist"
+    permission: "mycraftingplugin.use"
+

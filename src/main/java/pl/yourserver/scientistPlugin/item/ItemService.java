@@ -6,6 +6,7 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -31,6 +32,8 @@ public class ItemService {
     private final Plugin ingredientPlugin;
     private final Object ingredientApi;
     private final Method ingredientGetItemMethod;
+    private final Method ingredientGetQuantityMethod;
+    private final Method ingredientUpdateQuantityMethod;
     private final Object ingredientMappings;
     private final Method ingredientResolveKeyMethod;
     private final Map<String, String> ingredientDisplayLookup;
@@ -46,6 +49,8 @@ public class ItemService {
         this.ingredientPlugin = plugin.getServer().getPluginManager().getPlugin("IngredientPouchPlugin");
         this.ingredientApi = resolveIngredientApi(ingredientPlugin);
         this.ingredientGetItemMethod = findMethod(ingredientApi, "getItem", String.class);
+        this.ingredientGetQuantityMethod = findMethod(ingredientApi, "getItemQuantity", String.class, String.class);
+        this.ingredientUpdateQuantityMethod = findMethod(ingredientApi, "updateItemQuantity", String.class, String.class, int.class);
         this.ingredientMappings = resolveIngredientMappings(ingredientApi);
         this.ingredientResolveKeyMethod = findMappingsResolver(ingredientMappings);
         this.ingredientDisplayLookup = buildIngredientDisplayLookup(ingredientPlugin);
@@ -162,6 +167,120 @@ public class ItemService {
         return Optional.empty();
     }
 
+    public int countInInventory(Player player, String key) {
+        if (player == null || key == null || key.isEmpty()) {
+            return 0;
+        }
+        int total = 0;
+        for (ItemStack stack : player.getInventory().getContents()) {
+            if (stack == null || stack.getType().isAir()) {
+                continue;
+            }
+            String stackKey = readKey(stack).orElse(null);
+            if (key.equals(stackKey)) {
+                total += stack.getAmount();
+            }
+        }
+        return total;
+    }
+
+    public int countInPouch(UUID uuid, String key) {
+        if (uuid == null || key == null || key.isEmpty()) {
+            return 0;
+        }
+        if (ingredientApi == null || ingredientGetQuantityMethod == null) {
+            return 0;
+        }
+        try {
+            Object res = ingredientGetQuantityMethod.invoke(ingredientApi, uuid.toString(), key);
+            if (res instanceof Integer i) {
+                return i;
+            }
+        } catch (Throwable ignored) {
+        }
+        return 0;
+    }
+
+    public int countTotal(Player player, String key) {
+        if (player == null || key == null || key.isEmpty()) {
+            return 0;
+        }
+        return countInInventory(player, key) + countInPouch(player.getUniqueId(), key);
+    }
+
+    public boolean withdrawReagents(Player player, Map<String, Integer> reagents) {
+        if (player == null || reagents == null || reagents.isEmpty()) {
+            return true;
+        }
+        Map<String, Integer> remaining = new HashMap<>();
+        reagents.forEach((k, v) -> remaining.put(k, Math.max(0, v)));
+
+        org.bukkit.inventory.PlayerInventory inventory = player.getInventory();
+        ItemStack[] backup = new ItemStack[inventory.getSize()];
+        for (int i = 0; i < inventory.getSize(); i++) {
+            ItemStack stack = inventory.getItem(i);
+            backup[i] = stack == null ? null : stack.clone();
+        }
+
+        for (int slot = 0; slot < inventory.getSize(); slot++) {
+            ItemStack stack = inventory.getItem(slot);
+            if (stack == null || stack.getType().isAir()) {
+                continue;
+            }
+            String key = readKey(stack).orElse(null);
+            if (key == null) {
+                continue;
+            }
+            int need = remaining.getOrDefault(key, 0);
+            if (need <= 0) {
+                continue;
+            }
+            int take = Math.min(need, stack.getAmount());
+            if (take <= 0) {
+                continue;
+            }
+            if (take >= stack.getAmount()) {
+                inventory.setItem(slot, null);
+            } else {
+                ItemStack copy = stack.clone();
+                copy.setAmount(stack.getAmount() - take);
+                inventory.setItem(slot, copy);
+            }
+            remaining.put(key, need - take);
+        }
+
+        Map<String, Integer> pouchTaken = new HashMap<>();
+        UUID uuid = player.getUniqueId();
+        for (Map.Entry<String, Integer> entry : remaining.entrySet()) {
+            int need = entry.getValue();
+            if (need <= 0) {
+                continue;
+            }
+            if (!updatePouch(uuid, entry.getKey(), -need)) {
+                inventory.setContents(backup);
+                for (Map.Entry<String, Integer> taken : pouchTaken.entrySet()) {
+                    updatePouch(uuid, taken.getKey(), taken.getValue());
+                }
+                return false;
+            }
+            pouchTaken.put(entry.getKey(), need);
+        }
+        return true;
+    }
+
+    private boolean updatePouch(UUID uuid, String key, int delta) {
+        if (ingredientApi == null || ingredientUpdateQuantityMethod == null) {
+            return delta >= 0;
+        }
+        try {
+            Object res = ingredientUpdateQuantityMethod.invoke(ingredientApi, uuid.toString(), key, delta);
+            if (res instanceof Boolean b) {
+                return b;
+            }
+        } catch (Throwable ignored) {
+        }
+        return false;
+    }
     public NamespacedKey getMappingKey() {
         return mappingKey;
     }

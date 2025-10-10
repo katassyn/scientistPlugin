@@ -1,43 +1,5 @@
 # Each recipe defines reagents and duration
 recipes:
-  corrupted_petal_study:
-    title: "Corrupted Petal Study"
-    description: "Study corrupted petals to attune the lab."
-    reagents:
-      corrupted_petal_I: 16
-    duration_hours: 2
-    experiments_to_unlock: 5
-  blood_amber_infuse:
-    title: "Blood Amber Infusion"
-    description: "Infuse the lab with blood amber."
-    reagents:
-      blood_amber_I: 12
-    duration_hours: 3
-    experiments_to_unlock: 5
-  abyss_bone_t1:
-    title: "Abyssal Bone Research I"
-    description: "Unlock Tier I Abyss Bone crafting."
-    reagents:
-      corrupted_petal_I: 16
-      blood_amber_I: 8
-    duration_hours: 3
-    experiments_to_unlock: 5
-  abyss_bone_t2:
-    title: "Abyssal Bone Research II"
-    description: "Unlock Tier II Abyss Bone crafting."
-    reagents:
-      corrupted_petal_II: 12
-      blood_amber_II: 6
-    duration_hours: 6
-    experiments_to_unlock: 5
-  abyss_bone_t3:
-    title: "Abyssal Bone Research III"
-    description: "Unlock Tier III Abyss Bone crafting."
-    reagents:
-      corrupted_petal_III: 8
-      blood_amber_III: 4
-    duration_hours: 10
-    experiments_to_unlock: 5
   # ========== PER-CATEGORY ABYSSAL BONE UNLOCKS ==========
   # Durations: T1 ~3 days (72h), T2 ~1 week (168h), T3 ~2 weeks (336h)
   # Each requires 5 experiments to unlock (20% per completion)

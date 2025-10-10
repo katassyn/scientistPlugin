@@ -73,6 +73,7 @@ public class ResearchService {
             return false;
         }
 
+        markExpiredExperiments(player.getUniqueId());
         int running = countRunningExperiments(player.getUniqueId());
         int maxConc = plugin.getConfig().getInt("experiments.max_concurrent_per_player", 1);
         if (running >= maxConc) {
@@ -161,6 +162,7 @@ public class ResearchService {
         }
         Map<String, RecipeStatus> status = getPlayerRecipeStatus(uuid);
         Map<String, ActiveExperiment> running = getRunningExperiments(uuid);
+        long now = Instant.now().getEpochSecond();
         for (String key : recSec.getKeys(false)) {
             ConfigurationSection recipe = recSec.getConfigurationSection(key);
             LinkedHashMap<String, Integer> reagents = new LinkedHashMap<>();
@@ -174,6 +176,8 @@ public class ResearchService {
             RecipeStatus rs = status.getOrDefault(key, new RecipeStatus(false, 0));
             boolean prereq = prerequisitesMet(status, recipe);
             ActiveExperiment active = running.get(key);
+            long endEpoch = active != null ? active.endEpoch : 0L;
+            boolean runningNow = active != null && endEpoch > now;
             templates.add(new TemplateView(
                     key,
                     recipe.getString("title", key),
@@ -185,8 +189,8 @@ public class ResearchService {
                     rs.experimentsDone,
                     rs.unlocked,
                     prereq,
-                    active != null,
-                    active != null ? active.endEpoch : 0L
+                    runningNow,
+                    runningNow ? endEpoch : 0L
             ));
         }
         return templates;
@@ -209,7 +213,7 @@ public class ResearchService {
     private Map<String, ActiveExperiment> getRunningExperiments(UUID uuid) {
         Map<String, ActiveExperiment> map = new HashMap<>();
         try (Connection c = plugin.getDatabase().getConnection();
-             PreparedStatement ps = c.prepareStatement("SELECT recipe_key, UNIX_TIMESTAMP(end_at) end_ts FROM sci_experiment WHERE player_uuid=UNHEX(REPLACE(?,'-','')) AND status='RUNNING'")) {
+             PreparedStatement ps = c.prepareStatement("SELECT recipe_key, UNIX_TIMESTAMP(end_at) end_ts FROM sci_experiment WHERE player_uuid=UNHEX(REPLACE(?,'-','')) AND status='RUNNING' AND end_at > NOW()")) {
             ps.setString(1, uuid.toString());
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
@@ -224,7 +228,7 @@ public class ResearchService {
 
     private int countRunningExperiments(UUID uuid) {
         try (Connection c = plugin.getDatabase().getConnection();
-             PreparedStatement ps = c.prepareStatement("SELECT COUNT(*) FROM sci_experiment WHERE player_uuid=UNHEX(REPLACE(?,'-','')) AND status='RUNNING'")) {
+             PreparedStatement ps = c.prepareStatement("SELECT COUNT(*) FROM sci_experiment WHERE player_uuid=UNHEX(REPLACE(?,'-','')) AND status='RUNNING' AND end_at > NOW()")) {
             ps.setString(1, uuid.toString());
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
@@ -235,6 +239,16 @@ public class ResearchService {
             e.printStackTrace();
         }
         return 0;
+    }
+
+    private void markExpiredExperiments(UUID uuid) {
+        try (Connection c = plugin.getDatabase().getConnection();
+             PreparedStatement ps = c.prepareStatement("UPDATE sci_experiment SET status='FINISHED' WHERE player_uuid=UNHEX(REPLACE(?,'-','')) AND status='RUNNING' AND end_at <= NOW()")) {
+            ps.setString(1, uuid.toString());
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
     }
 
     private boolean prerequisitesMet(Map<String, RecipeStatus> statusMap, ConfigurationSection recipeSection) {
@@ -267,7 +281,8 @@ public class ResearchService {
                     long endTs = rs.getLong("end_ts");
                     long now = Instant.now().getEpochSecond();
                     long remain = Math.max(0, endTs - now);
-                    String line = " &7- &f" + key + " &7[" + status + "] " + ("RUNNING".equals(status) ? ((remain / 60) + "m left") : "ready");
+                    boolean running = "RUNNING".equalsIgnoreCase(status) && remain > 0;
+                    String line = " &7- &f" + key + " &7[" + status + "] " + (running ? ((remain / 60) + "m left") : "ready");
                     p.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(prefix + line));
                 }
                 if (!any) {
@@ -281,6 +296,7 @@ public class ResearchService {
     }
 
     public void claimFinished(Player p) {
+        markExpiredExperiments(p.getUniqueId());
         // Increment experiments_done and unlock if threshold reached
         try (Connection c = plugin.getDatabase().getConnection()) {
             // Fetch finished experiments

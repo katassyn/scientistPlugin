@@ -36,6 +36,7 @@ public class GuiManager implements Listener {
     private final Map<UUID, String> selectedResearch = new HashMap<>();
     private final Map<UUID, Map<Integer, String>> researchSlotMap = new HashMap<>();
     private final Map<UUID, Integer> researchPage = new HashMap<>();
+    private final Map<UUID, Integer> researchUpdateTasks = new HashMap<>();
     private static final int[] DEFAULT_TEMPLATE_SLOTS = new int[]{
             10, 11, 12, 13, 14, 15, 16,
             19, 20, 21, 22, 23, 24, 25,
@@ -91,16 +92,46 @@ public class GuiManager implements Listener {
     }
 
     public void openResearch(Player p) {
-        renderResearch(p);
+        renderResearch(p, true);
     }
 
-    private void renderResearch(Player p) {
+    private void renderResearch(Player p, boolean scheduleUpdate) {
         FileConfiguration gui = plugin.getConfigManager().gui();
         ConfigurationSection researchSec = gui.getConfigurationSection("research");
+        if (researchSec == null) {
+            return;
+        }
         String title = researchSec.getString("title", "Research Lab");
         int size = researchSec.getInt("size", 45);
-        Inventory inv = Bukkit.createInventory(p, size, Component.text(title));
+
+        UUID uuid = p.getUniqueId();
+        Inventory tracked = activeInventories.get(uuid);
+        boolean reuse = tracked != null
+                && "research".equals(openGui.get(uuid))
+                && p.getOpenInventory().getTopInventory().equals(tracked)
+                && tracked.getSize() == size;
+        Inventory inv;
+        if (reuse) {
+            inv = tracked;
+            inv.clear();
+        } else {
+            inv = Bukkit.createInventory(p, size, Component.text(title));
+        }
+
         ConfigurationSection layout = researchSec.getConfigurationSection("layout");
+        if (layout == null) {
+            if (!reuse) {
+                presentInventory(p, "research", inv);
+            } else {
+                openGui.put(uuid, "research");
+                activeInventories.put(uuid, inv);
+            }
+            if (scheduleUpdate) {
+                startResearchUpdater(p);
+            }
+            return;
+        }
+
         int[] templateSlots = resolveTemplateSlots(layout.getIntegerList("template_slots"));
         int startSlot = layout.getInt("start_button", 40);
         int claimSlot = layout.getInt("claim_button", 41);
@@ -112,10 +143,10 @@ public class GuiManager implements Listener {
         if (prevSlot >= 0) reserved.add(prevSlot);
         if (nextSlot >= 0) reserved.add(nextSlot);
         reserved.addAll(collectDecorSlots(researchSec));
+
         applyBackground(inv, researchSec, reserved);
         applyDecor(inv, researchSec);
 
-        UUID uuid = p.getUniqueId();
         List<ResearchService.TemplateView> templates = plugin.getResearchService().buildTemplates(uuid);
         Map<String, ResearchService.TemplateView> templateByKey = new HashMap<>();
         templates.forEach(t -> templateByKey.put(t.key, t));
@@ -200,32 +231,47 @@ public class GuiManager implements Listener {
         ItemMeta startMeta = startItem.getItemMeta();
         List<Component> startLore = new ArrayList<>();
         String selectedKey = selectedResearch.get(uuid);
-        if (runningCount >= maxConcurrent) {
+        boolean limitReached = runningCount >= maxConcurrent;
+        if (limitReached) {
             startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&cYou already run the maximum number of experiments."));
         }
-        if (selectedKey != null) {
-            ResearchService.TemplateView selectedTemplate = templateByKey.get(selectedKey);
-            if (selectedTemplate != null) {
-                boolean hasAll = hasAllMap.getOrDefault(selectedKey, true);
-                boolean canStart = canStartMap.getOrDefault(selectedKey, false);
-                List<String> missing = missingMap.getOrDefault(selectedKey, Collections.emptyList());
-                startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&7Selected: &f" + selectedTemplate.title));
-                startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&7Duration: &f" + formatDuration(selectedTemplate.durationHours)));
+        ResearchService.TemplateView selectedTemplate = selectedKey == null ? null : templateByKey.get(selectedKey);
+        boolean selectedCanStart = selectedTemplate != null && canStartMap.getOrDefault(selectedKey, false);
+        if (selectedTemplate != null) {
+            startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&7Selected: &f" + selectedTemplate.title));
+            startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&7Duration: &f" + formatDuration(selectedTemplate.durationHours)));
+            if (selectedTemplate.running) {
+                long remaining = Math.max(0L, selectedTemplate.endEpoch - Instant.now().getEpochSecond());
+                startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&bExperiment in progress."));
+                startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&7Time left: &f" + formatRemaining(remaining)));
+                startMeta.displayName(pl.yourserver.scientistPlugin.util.Texts.legacy("&bExperiment Running"));
+            } else {
                 if (!selectedTemplate.prerequisitesMet) {
                     startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&cMissing prerequisites."));
                 }
+                List<String> missing = missingMap.getOrDefault(selectedKey, Collections.emptyList());
                 if (!missing.isEmpty()) {
                     startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&cMissing reagents:"));
                     for (String miss : missing) {
                         startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&c- " + pl.yourserver.scientistPlugin.util.Texts.prettyKey(miss)));
                     }
                 }
-                startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy(canStart ? "&aClick to begin." : "&cCannot start yet."));
-                startMeta.displayName(pl.yourserver.scientistPlugin.util.Texts.legacy(canStart ? "&aStart Experiment" : "&cStart Experiment"));
+                startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy(selectedCanStart ? "&aClick to begin." : "&cCannot start yet."));
+                startMeta.displayName(pl.yourserver.scientistPlugin.util.Texts.legacy(selectedCanStart ? "&aStart Experiment" : "&cStart Experiment"));
             }
         } else {
             startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&7Select an experiment to begin."));
-            startMeta.displayName(pl.yourserver.scientistPlugin.util.Texts.legacy("&7Start Experiment"));
+            startMeta.displayName(pl.yourserver.scientistPlugin.util.Texts.legacy(limitReached ? "&cStart Experiment" : "&7Start Experiment"));
+        }
+        Material startType = startItem.getType();
+        if (startType != null && startType.name().endsWith("_DYE")) {
+            if (selectedTemplate != null && selectedTemplate.running) {
+                startItem.setType(Material.CYAN_DYE);
+            } else if (limitReached || (selectedTemplate != null && !selectedCanStart)) {
+                startItem.setType(Material.GRAY_DYE);
+            } else {
+                startItem.setType(Material.LIME_DYE);
+            }
         }
         startMeta.lore(startLore);
         startItem.setItemMeta(startMeta);
@@ -253,7 +299,44 @@ public class GuiManager implements Listener {
             inv.setItem(nextSlot, nextItem);
         }
 
-        presentInventory(p, "research", inv);
+        if (!reuse) {
+            presentInventory(p, "research", inv);
+        } else {
+            openGui.put(uuid, "research");
+            activeInventories.put(uuid, inv);
+        }
+        if (scheduleUpdate) {
+            startResearchUpdater(p);
+        }
+    }
+
+    private void startResearchUpdater(Player player) {
+        UUID uuid = player.getUniqueId();
+        cancelResearchUpdater(uuid);
+        int taskId = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (!player.isOnline() || !isResearchOpen(player)) {
+                cancelResearchUpdater(uuid);
+                return;
+            }
+            renderResearch(player, false);
+        }, 20L, 20L).getTaskId();
+        researchUpdateTasks.put(uuid, taskId);
+    }
+
+    private boolean isResearchOpen(Player player) {
+        UUID uuid = player.getUniqueId();
+        if (!"research".equals(openGui.get(uuid))) {
+            return false;
+        }
+        Inventory tracked = activeInventories.get(uuid);
+        return tracked != null && player.getOpenInventory().getTopInventory().equals(tracked);
+    }
+
+    private void cancelResearchUpdater(UUID uuid) {
+        Integer taskId = researchUpdateTasks.remove(uuid);
+        if (taskId != null) {
+            Bukkit.getScheduler().cancelTask(taskId);
+        }
     }
 
     public void openAbyssal(Player p) {
@@ -765,29 +848,29 @@ public class GuiManager implements Listener {
                             selectedResearch.put(uid, selectedKey);
                         }
                     }
-                    renderResearch(p);
+                    renderResearch(p, true);
                     return;
                 }
                 if (rawSlot == claim) {
                     plugin.getResearchService().claimFinished(p);
-                    renderResearch(p);
+                    renderResearch(p, true);
                     return;
                 }
                 if (rawSlot == prev) {
                     researchPage.put(uid, Math.max(0, researchPage.getOrDefault(uid, 0) - 1));
-                    renderResearch(p);
+                    renderResearch(p, true);
                     return;
                 }
                 if (rawSlot == next) {
                     researchPage.put(uid, researchPage.getOrDefault(uid, 0) + 1);
-                    renderResearch(p);
+                    renderResearch(p, true);
                     return;
                 }
                 if (templateSlots.contains(rawSlot)) {
                     String key = researchSlotMap.getOrDefault(uid, Collections.emptyMap()).get(rawSlot);
                     if (key != null) {
                         selectedResearch.put(uid, key);
-                        renderResearch(p);
+                        renderResearch(p, true);
                     }
                     e.setCancelled(true);
                     return;
@@ -948,6 +1031,7 @@ public class GuiManager implements Listener {
             selectedResearch.remove(id);
             researchSlotMap.remove(id);
             researchPage.remove(id);
+            cancelResearchUpdater(id);
             return;
         }
 
@@ -958,6 +1042,7 @@ public class GuiManager implements Listener {
             selectedResearch.remove(id);
             researchSlotMap.remove(id);
             researchPage.remove(id);
+            cancelResearchUpdater(id);
             return;
         }
 
@@ -978,6 +1063,7 @@ public class GuiManager implements Listener {
             selectedResearch.remove(id);
             researchSlotMap.remove(id);
             researchPage.remove(id);
+            cancelResearchUpdater(id);
             rollStates.remove(id);
             return;
         }

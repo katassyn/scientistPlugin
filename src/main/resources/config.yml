@@ -25,10 +25,10 @@ mythic_drops:
     hell: II
     blood: III
   tier_chance:
-    I: 0.08
-    II: 0.04
-    III: 0.015
-  default_families: [ void_shard, soul_residue ]
+    I: 0.02
+    II: 0.008
+    III: 0.002
+  default_families: [ void_shard, soul_residue, corrupted_petal, blood_amber ]
   groups:
     Q1:
       pattern: "(flamecult|perral_world_dragonknight|raazghul|grimmag)"
@@ -38,10 +38,10 @@ mythic_drops:
       families: [ rift_fibre, soul_residue ]
     Q3:
       pattern: "(cursed_|slain_|evil_miller|heredur)"
-      families: [ shadow_ash, frost_core ]
+      families: [ shadow_ash, frost_core, corrupted_petal ]
     Q4:
       pattern: "(sanguine_clan|eternal_|bearach|lightning_wolf)"
-      families: [ ancient_bone_dust, gloom_lotus ]
+      families: [ ancient_bone_dust, gloom_lotus, blood_amber ]
     Q5:
       pattern: "(maggot|andermagic|khalys|wandering_experiment)"
       families: [ void_shard, eldritch_ichor ]
@@ -79,49 +79,49 @@ mythic_drops:
 drops:
   # Example drop config per entity type (extend as needed)
   ZOMBIE:
-    corrupted_petal_I: 0.12
-    corrupted_petal_II: 0.04
-    corrupted_petal_III: 0.01
-    gloom_lotus_I: 0.08
-    gloom_lotus_II: 0.03
-    gloom_lotus_III: 0.01
+    corrupted_petal_I: 0.015
+    corrupted_petal_II: 0.005
+    corrupted_petal_III: 0.0015
+    gloom_lotus_I: 0.012
+    gloom_lotus_II: 0.004
+    gloom_lotus_III: 0.0012
   SKELETON:
-    blood_amber_I: 0.06
-    blood_amber_II: 0.03
-    blood_amber_III: 0.01
-    ancient_bone_dust_I: 0.10
-    ancient_bone_dust_II: 0.04
-    ancient_bone_dust_III: 0.015
-    void_shard_I: 0.05
-    void_shard_II: 0.02
-    void_shard_III: 0.008
+    blood_amber_I: 0.012
+    blood_amber_II: 0.004
+    blood_amber_III: 0.0012
+    ancient_bone_dust_I: 0.02
+    ancient_bone_dust_II: 0.007
+    ancient_bone_dust_III: 0.0025
+    void_shard_I: 0.012
+    void_shard_II: 0.004
+    void_shard_III: 0.0012
   SPIDER:
-    rift_fibre_I: 0.10
-    rift_fibre_II: 0.05
-    rift_fibre_III: 0.02
-    shadow_ash_I: 0.06
-    shadow_ash_II: 0.03
-    shadow_ash_III: 0.01
+    rift_fibre_I: 0.018
+    rift_fibre_II: 0.006
+    rift_fibre_III: 0.0018
+    shadow_ash_I: 0.012
+    shadow_ash_II: 0.004
+    shadow_ash_III: 0.0012
   ENDERMAN:
-    storm_pearl_I: 0.10
-    storm_pearl_II: 0.05
-    storm_pearl_III: 0.02
+    storm_pearl_I: 0.015
+    storm_pearl_II: 0.005
+    storm_pearl_III: 0.0015
   CREEPER:
-    ember_powder_I: 0.08
-    ember_powder_II: 0.04
-    ember_powder_III: 0.015
+    ember_powder_I: 0.015
+    ember_powder_II: 0.005
+    ember_powder_III: 0.0015
   DROWNED:
-    blood_amber_I: 0.05
-    blood_amber_II: 0.025
-    blood_amber_III: 0.01
+    blood_amber_I: 0.012
+    blood_amber_II: 0.004
+    blood_amber_III: 0.0012
   HUSK:
-    soul_residue_I: 0.07
-    soul_residue_II: 0.035
-    soul_residue_III: 0.012
+    soul_residue_I: 0.012
+    soul_residue_II: 0.004
+    soul_residue_III: 0.0012
   STRAY:
-    frost_core_I: 0.10
-    frost_core_II: 0.05
-    frost_core_III: 0.02
+    frost_core_I: 0.015
+    frost_core_II: 0.005
+    frost_core_III: 0.0015
 
 roll_rules:
   choice_count: 2

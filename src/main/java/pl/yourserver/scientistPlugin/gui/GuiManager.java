@@ -33,6 +33,7 @@ public class GuiManager implements Listener {
     private final Map<UUID, Inventory> activeInventories = new HashMap<>();
     private final Map<UUID, RollState> rollStates = new HashMap<>();
     private final Map<UUID, Integer> pendingChoice = new HashMap<>();
+    private final Map<UUID, Long> abyssalPendingClickTime = new HashMap<>();
     private final Map<UUID, String> selectedResearch = new HashMap<>();
     private final Map<UUID, Map<Integer, String>> researchSlotMap = new HashMap<>();
     private final Map<UUID, Integer> researchPage = new HashMap<>();
@@ -194,7 +195,7 @@ public class GuiManager implements Listener {
                 }
             }
             boolean hasAll = missing.isEmpty();
-            boolean canStart = hasAll && tmpl.prerequisitesMet && !tmpl.running && runningCount < maxConcurrent;
+            boolean canStart = hasAll && tmpl.prerequisitesMet && !tmpl.running && runningCount < maxConcurrent && !tmpl.unlocked;
             hasAllMap.put(tmpl.key, hasAll);
             canStartMap.put(tmpl.key, canStart);
             missingMap.put(tmpl.key, missing);
@@ -246,18 +247,27 @@ public class GuiManager implements Listener {
                 startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&7Time left: &f" + formatRemaining(remaining)));
                 startMeta.displayName(pl.yourserver.scientistPlugin.util.Texts.legacy("&bExperiment Running"));
             } else {
-                if (!selectedTemplate.prerequisitesMet) {
-                    startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&cMissing prerequisites."));
-                }
-                List<String> missing = missingMap.getOrDefault(selectedKey, Collections.emptyList());
-                if (!missing.isEmpty()) {
-                    startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&cMissing reagents:"));
-                    for (String miss : missing) {
-                        startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&c- " + pl.yourserver.scientistPlugin.util.Texts.prettyKey(miss)));
+                if (selectedTemplate.unlocked) {
+                    String loreLine = plugin.getConfigManager().messages().getString("experiment_already_mastered_lore", "&aAlready mastered.");
+                    String buttonText = plugin.getConfigManager().messages().getString("experiment_already_mastered_button", "&7Research Complete");
+                    if (loreLine != null && !loreLine.isEmpty()) {
+                        startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy(loreLine));
                     }
+                    startMeta.displayName(pl.yourserver.scientistPlugin.util.Texts.legacy(buttonText == null ? "&7Research Complete" : buttonText));
+                } else {
+                    if (!selectedTemplate.prerequisitesMet) {
+                        startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&cMissing prerequisites."));
+                    }
+                    List<String> missing = missingMap.getOrDefault(selectedKey, Collections.emptyList());
+                    if (!missing.isEmpty()) {
+                        startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&cMissing reagents:"));
+                        for (String miss : missing) {
+                            startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&c- " + pl.yourserver.scientistPlugin.util.Texts.prettyKey(miss)));
+                        }
+                    }
+                    startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy(selectedCanStart ? "&aClick to begin." : "&cCannot start yet."));
+                    startMeta.displayName(pl.yourserver.scientistPlugin.util.Texts.legacy(selectedCanStart ? "&aStart Experiment" : "&cStart Experiment"));
                 }
-                startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy(selectedCanStart ? "&aClick to begin." : "&cCannot start yet."));
-                startMeta.displayName(pl.yourserver.scientistPlugin.util.Texts.legacy(selectedCanStart ? "&aStart Experiment" : "&cStart Experiment"));
             }
         } else {
             startLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy("&7Select an experiment to begin."));
@@ -278,6 +288,36 @@ public class GuiManager implements Listener {
         inv.setItem(startSlot, startItem);
 
         ItemStack claimItem = configuredItem(researchSec.getConfigurationSection("icons.claim"), "CHEST", "&aClaim Finished");
+        ItemMeta claimMeta = claimItem.getItemMeta();
+        List<Component> claimLore = new ArrayList<>();
+        int readyCount = plugin.getResearchService().countFinishedExperiments(uuid);
+        if (readyCount > 0) {
+            String readyName = plugin.getConfigManager().messages().getString("claim_ready_name", "&aClaim Rewards");
+            String readyLore = plugin.getConfigManager().messages().getString("claim_ready_lore", "&aRewards ready: {count}");
+            if (readyName != null && !readyName.isEmpty()) {
+                claimMeta.displayName(pl.yourserver.scientistPlugin.util.Texts.legacy(readyName.replace("{count}", String.valueOf(readyCount))));
+            }
+            if (readyLore != null && !readyLore.isEmpty()) {
+                claimLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy(readyLore.replace("{count}", String.valueOf(readyCount))));
+            }
+            claimMeta.addEnchant(Enchantment.DURABILITY, 1, true);
+            claimMeta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+        } else {
+            String emptyName = plugin.getConfigManager().messages().getString("claim_empty_name", "&7Claim Finished");
+            String emptyLore = plugin.getConfigManager().messages().getString("claim_empty_lore", "&7No rewards ready.");
+            if (emptyName != null && !emptyName.isEmpty()) {
+                claimMeta.displayName(pl.yourserver.scientistPlugin.util.Texts.legacy(emptyName));
+            }
+            if (emptyLore != null && !emptyLore.isEmpty()) {
+                claimLore.add(pl.yourserver.scientistPlugin.util.Texts.legacy(emptyLore));
+            }
+            claimMeta.removeItemFlags(ItemFlag.HIDE_ENCHANTS);
+            for (Enchantment enchantment : new ArrayList<>(claimMeta.getEnchants().keySet())) {
+                claimMeta.removeEnchant(enchantment);
+            }
+        }
+        claimMeta.lore(claimLore);
+        claimItem.setItemMeta(claimMeta);
         inv.setItem(claimSlot, claimItem);
 
         if (prevSlot >= 0) {
@@ -343,6 +383,7 @@ public class GuiManager implements Listener {
         UUID uid = p.getUniqueId();
         rollStates.remove(uid);
         pendingChoice.remove(uid);
+        abyssalPendingClickTime.remove(uid);
         FileConfiguration gui = plugin.getConfigManager().gui();
         ConfigurationSection abyssSec = gui.getConfigurationSection("abyssal");
         String title = abyssSec.getString("title", "Abyssal Enchanting");
@@ -383,26 +424,6 @@ public class GuiManager implements Listener {
         }
 
         presentInventory(p, "abyssal", inv);
-    }
-
-    public void openConfirm(Player p) {
-        FileConfiguration gui = plugin.getConfigManager().gui();
-        ConfigurationSection confirmSec = gui.getConfigurationSection("confirm");
-        String title = confirmSec.getString("title", "Confirm Abyssal Application");
-        int size = confirmSec.getInt("size", 27);
-        Inventory inv = Bukkit.createInventory(p, size, Component.text(title));
-        ConfigurationSection layout = confirmSec.getConfigurationSection("layout");
-        int yes = layout.getInt("yes", 11);
-        int no = layout.getInt("no", 15);
-        Set<Integer> reserved = new HashSet<>();
-        reserved.add(yes);
-        reserved.add(no);
-        reserved.addAll(collectDecorSlots(confirmSec));
-        applyBackground(inv, confirmSec, reserved);
-        applyDecor(inv, confirmSec);
-        inv.setItem(yes, configuredItem(confirmSec.getConfigurationSection("icons.yes"), "LIME_WOOL", "&aConfirm"));
-        inv.setItem(no, configuredItem(confirmSec.getConfigurationSection("icons.no"), "RED_WOOL", "&cCancel"));
-        presentInventory(p, "confirm", inv);
     }
 
     private ConfigurationSection iconSection(ConfigurationSection icons, String primary, String... fallbacks) {
@@ -551,6 +572,26 @@ public class GuiManager implements Listener {
     }
 
     private String formatDuration(int hours) {
+        if (plugin.getConfig().getBoolean("debug.mode", false)) {
+            long seconds = plugin.getConfig().getLong("debug.short_experiments_seconds", 5L);
+            if (seconds >= 3600) {
+                long totalHours = seconds / 3600;
+                long minutes = (seconds % 3600) / 60;
+                if (minutes == 0) {
+                    return totalHours + "h (debug)";
+                }
+                return totalHours + "h " + minutes + "m (debug)";
+            }
+            if (seconds >= 60) {
+                long minutes = seconds / 60;
+                long secs = seconds % 60;
+                if (secs == 0) {
+                    return minutes + "m (debug)";
+                }
+                return minutes + "m " + secs + "s (debug)";
+            }
+            return seconds + "s (debug)";
+        }
         if (hours >= 24) {
             int days = hours / 24;
             int rem = hours % 24;
@@ -755,6 +796,16 @@ public class GuiManager implements Listener {
         int boneSlot = layout.getInt("bone_slot", 24);
         UUID uid = player.getUniqueId();
 
+        // If there's an active roll, don't clear it - items are locked
+        RollState activeRoll = rollStates.get(uid);
+        if (activeRoll != null) {
+            return;
+        }
+
+        pendingChoice.remove(uid);
+        abyssalPendingClickTime.remove(uid);
+        updateSelectionButtons(inv, abyssSec, null);
+
         ItemStack target = inv.getItem(targetSlot);
         ItemStack bone = inv.getItem(boneSlot);
 
@@ -783,6 +834,84 @@ public class GuiManager implements Listener {
         if (previous != null) {
             resetAbyssalInterface(inv, abyssSec);
         }
+    }
+
+    private void handleAbyssalSelection(Player player, Inventory inv, ConfigurationSection abyssSec, int optionIndex) {
+        UUID uid = player.getUniqueId();
+        RollState st = rollStates.get(uid);
+        if (st == null) {
+            sendMessage(player, "roll_not_ready", "&cPress Enchant to reveal modifiers first.");
+            return;
+        }
+        long now = System.currentTimeMillis();
+        Integer pending = pendingChoice.get(uid);
+        Long last = abyssalPendingClickTime.get(uid);
+        long window = plugin.getConfig().getLong("abyssal.double_click_window_ms", 600L);
+        if (pending != null && pending == optionIndex && last != null && now - last <= Math.max(200L, window)) {
+            pendingChoice.remove(uid);
+            abyssalPendingClickTime.remove(uid);
+            updateSelectionButtons(inv, abyssSec, null);
+            plugin.getAbyssalService().applySelected(player, rollStates, optionIndex);
+            return;
+        }
+        pendingChoice.put(uid, optionIndex);
+        abyssalPendingClickTime.put(uid, now);
+        updateSelectionButtons(inv, abyssSec, optionIndex);
+        String hint = plugin.getConfigManager().messages().getString("abyssal_double_click_hint", "&eDouble-click again to apply this modifier.");
+        if (hint != null && !hint.isEmpty()) {
+            String prefix = plugin.getConfigManager().messages().getString("prefix", "");
+            player.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(prefix + hint));
+        }
+    }
+
+    private void updateSelectionButtons(Inventory inv, ConfigurationSection abyssSec, Integer pendingOption) {
+        if (abyssSec == null) {
+            return;
+        }
+        ConfigurationSection layout = abyssSec.getConfigurationSection("layout");
+        ConfigurationSection icons = abyssSec.getConfigurationSection("icons");
+        if (layout == null) {
+            return;
+        }
+        int selectASlot = layout.getInt("select_a", 30);
+        int selectBSlot = layout.getInt("select_b", 32);
+        ItemStack selectAItem = configuredItem(icons == null ? null : icons.getConfigurationSection("select_a"), "LIME_DYE", "&aAccept Option A");
+        ItemStack selectBItem = configuredItem(icons == null ? null : icons.getConfigurationSection("select_b"), "LIGHT_BLUE_DYE", "&bAccept Option B");
+        decorateSelectionItem(selectAItem, pendingOption != null && pendingOption == 0, "A");
+        decorateSelectionItem(selectBItem, pendingOption != null && pendingOption == 1, "B");
+        if (selectASlot >= 0 && selectASlot < inv.getSize()) {
+            inv.setItem(selectASlot, selectAItem);
+        }
+        if (selectBSlot >= 0 && selectBSlot < inv.getSize()) {
+            inv.setItem(selectBSlot, selectBItem);
+        }
+    }
+
+    private void decorateSelectionItem(ItemStack item, boolean selected, String label) {
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) {
+            return;
+        }
+        if (selected) {
+            String name = plugin.getConfigManager().messages().getString("abyssal_selected_button", "&eConfirm Option {label}");
+            if (name != null && !name.isEmpty()) {
+                meta.displayName(pl.yourserver.scientistPlugin.util.Texts.legacy(name.replace("{label}", label)));
+            }
+            List<Component> lore = meta.lore();
+            if (lore == null) {
+                lore = new ArrayList<>();
+            } else {
+                lore = new ArrayList<>(lore);
+            }
+            String hint = plugin.getConfigManager().messages().getString("abyssal_double_click_hint", "&eDouble-click again to apply this modifier.");
+            if (hint != null && !hint.isEmpty()) {
+                lore.add(pl.yourserver.scientistPlugin.util.Texts.legacy(hint));
+            }
+            meta.lore(lore);
+            meta.addEnchant(Enchantment.DURABILITY, 1, true);
+            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+        }
+        item.setItemMeta(meta);
     }
 
     @EventHandler
@@ -840,6 +969,7 @@ public class GuiManager implements Listener {
                 UUID uid = p.getUniqueId();
 
                 if (rawSlot == start) {
+                    e.setCancelled(true);
                     String selectedKey = selectedResearch.get(uid);
                     if (selectedKey == null) {
                         sendMessage(p, "research_select_first", "&cSelect an experiment first.");
@@ -852,16 +982,19 @@ public class GuiManager implements Listener {
                     return;
                 }
                 if (rawSlot == claim) {
+                    e.setCancelled(true);
                     plugin.getResearchService().claimFinished(p);
                     renderResearch(p, true);
                     return;
                 }
                 if (rawSlot == prev) {
+                    e.setCancelled(true);
                     researchPage.put(uid, Math.max(0, researchPage.getOrDefault(uid, 0) - 1));
                     renderResearch(p, true);
                     return;
                 }
                 if (rawSlot == next) {
+                    e.setCancelled(true);
                     researchPage.put(uid, researchPage.getOrDefault(uid, 0) + 1);
                     renderResearch(p, true);
                     return;
@@ -885,6 +1018,7 @@ public class GuiManager implements Listener {
                     e.setCancelled(true);
                     return;
                 }
+                UUID uid = p.getUniqueId();
                 int roll = layout.getInt("roll_button", 31);
                 int selectA = layout.getInt("select_a", 30);
                 int selectB = layout.getInt("select_b", 32);
@@ -894,23 +1028,59 @@ public class GuiManager implements Listener {
                 int backSlot = layout.getInt("back_button", -1);
                 int instructionsSlot = layout.getInt("instructions_button", -1);
                 boolean slotInteraction = rawSlot == targetSlot || rawSlot == boneSlot;
+                RollState activeRoll = rollStates.get(uid);
+
+                // After rolling, bone and target cannot be removed - only accept/reject options are available
+                if (topClick && (rawSlot == boneSlot || rawSlot == targetSlot) && activeRoll != null) {
+                    e.setCancelled(true);
+                    sendMessage(p, "items_locked", "&cItems are committed to the roll. Choose Accept or Reject.");
+                    return;
+                }
+
                 if (topClick && slotInteraction) {
                     cancel = false;
                     Bukkit.getScheduler().runTask(plugin, () -> handleAbyssalSlotUpdate(p, top));
                 } else if (!topClick && (e.getAction() == InventoryAction.MOVE_TO_OTHER_INVENTORY
                         || e.getAction() == InventoryAction.HOTBAR_SWAP
                         || e.getAction() == InventoryAction.HOTBAR_MOVE_AND_READD)) {
+                    // Prevent any bottom inventory actions that could affect bone slot when roll is active
+                    if (activeRoll != null) {
+                        e.setCancelled(true);
+                        return;
+                    }
                     Bukkit.getScheduler().runTask(plugin, () -> handleAbyssalSlotUpdate(p, top));
                 }
                 if (rawSlot == roll) {
+                    e.setCancelled(true);
+                    // Prevent multiple rolls - bone is committed after first roll
+                    if (activeRoll != null) {
+                        sendMessage(p, "roll_already_active", "&cYou already have active modifiers. Choose Accept or Reject.");
+                        return;
+                    }
                     plugin.getAbyssalService().rollOptions(p, e.getInventory(), rollStates);
+                    pendingChoice.remove(uid);
+                    abyssalPendingClickTime.remove(uid);
+                    updateSelectionButtons(top, abyssSec, null);
                     return;
                 }
 
                 if (backSlot >= 0 && rawSlot == backSlot) {
-                    refundSlots(p, top, new int[]{targetSlot, boneSlot});
+                    e.setCancelled(true);
+                    // If there's an active roll, consume bone (discard) and return target
+                    if (activeRoll != null) {
+                        ItemStack bone = top.getItem(boneSlot);
+                        if (bone != null && !bone.getType().isAir()) {
+                            top.setItem(boneSlot, null);
+                            sendMessage(p, "bone_consumed_on_back", "&7Going back discarded the roll. The bone was consumed.");
+                        }
+                        refundSlots(p, top, new int[]{targetSlot});
+                    } else {
+                        // No active roll - return both items
+                        refundSlots(p, top, new int[]{targetSlot, boneSlot});
+                    }
                     rollStates.remove(p.getUniqueId());
                     pendingChoice.remove(p.getUniqueId());
+                    abyssalPendingClickTime.remove(p.getUniqueId());
                     openMain(p);
                     return;
                 }
@@ -923,21 +1093,13 @@ public class GuiManager implements Listener {
                 RollState st = rollStates.get(p.getUniqueId());
 
                 if (rawSlot == selectA) {
-                    if (st == null) {
-                        sendMessage(p, "roll_not_ready", "&cPress Enchant to reveal modifiers first.");
-                    } else {
-                        pendingChoice.put(p.getUniqueId(), 0);
-                        openConfirm(p);
-                    }
+                    e.setCancelled(true);
+                    handleAbyssalSelection(p, top, abyssSec, 0);
                     return;
                 }
                 if (rawSlot == selectB) {
-                    if (st == null) {
-                        sendMessage(p, "roll_not_ready", "&cPress Enchant to reveal modifiers first.");
-                    } else {
-                        pendingChoice.put(p.getUniqueId(), 1);
-                        openConfirm(p);
-                    }
+                    e.setCancelled(true);
+                    handleAbyssalSelection(p, top, abyssSec, 1);
                     return;
                 }
                 if (rawSlot == reject) {
@@ -947,8 +1109,10 @@ public class GuiManager implements Listener {
                         boolean consumed = consumeBone(top, boneSlot);
                         rollStates.remove(p.getUniqueId());
                         pendingChoice.remove(p.getUniqueId());
+                        abyssalPendingClickTime.remove(p.getUniqueId());
                         refundSlots(p, top, new int[]{targetSlot});
                         resetAbyssalInterface(top, abyssSec);
+                        updateSelectionButtons(top, abyssSec, null);
                         if (consumed) {
                             sendMessage(p, "reject_done", "&7Roll discarded. The bone was consumed.");
                         } else {
@@ -957,24 +1121,6 @@ public class GuiManager implements Listener {
                         }
                     }
                     return;
-                }
-            }
-            case "confirm" -> {
-                int yes = gui.getInt("confirm.layout.yes", 11);
-                int no = gui.getInt("confirm.layout.no", 15);
-                if (rawSlot == yes) {
-                    Integer choice = pendingChoice.remove(p.getUniqueId());
-                    if (choice != null) {
-                        plugin.getAbyssalService().applySelected(p, rollStates, choice);
-                    }
-                } else if (rawSlot == no) {
-                    pendingChoice.remove(p.getUniqueId());
-                    RollState st = rollStates.get(p.getUniqueId());
-                    if (st != null && st.invRef != null) {
-                        presentInventory(p, "abyssal", st.invRef);
-                    } else {
-                        p.closeInventory();
-                    }
                 }
             }
         }
@@ -997,9 +1143,22 @@ public class GuiManager implements Listener {
         if (ctx.equals("abyssal")) {
             FileConfiguration gui = plugin.getConfigManager().gui();
             ConfigurationSection layout = gui.getConfigurationSection("abyssal.layout");
+            int targetSlot = layout.getInt("target_slot", 20);
+            int boneSlot = layout.getInt("bone_slot", 24);
             Set<Integer> allowed = new HashSet<>();
-            allowed.add(layout.getInt("target_slot", 20));
-            allowed.add(layout.getInt("bone_slot", 24));
+            allowed.add(targetSlot);
+            allowed.add(boneSlot);
+
+            // If there's an active roll, bone and target slots cannot be modified
+            RollState activeRoll = rollStates.get(id);
+            if (activeRoll != null && (e.getRawSlots().contains(boneSlot) || e.getRawSlots().contains(targetSlot))) {
+                e.setCancelled(true);
+                if (e.getWhoClicked() instanceof Player player) {
+                    sendMessage(player, "items_locked", "&cItems are committed to the roll. Choose Accept or Reject.");
+                }
+                return;
+            }
+
             for (int slot : e.getRawSlots()) {
                 if (slot < top.getSize() && !allowed.contains(slot)) {
                     e.setCancelled(true);
@@ -1046,18 +1205,8 @@ public class GuiManager implements Listener {
             return;
         }
 
-        if (ctx.equals("confirm")) {
-            Integer pending = pendingChoice.remove(id);
-            if (pending != null) {
-                RollState st = rollStates.get(id);
-                if (st != null && st.invRef != null) {
-                    presentInventoryLater(player, "abyssal", st.invRef);
-                }
-            }
-            return;
-        }
-
         pendingChoice.remove(id);
+        abyssalPendingClickTime.remove(id);
 
         if (ctx.equals("research")) {
             selectedResearch.remove(id);
@@ -1070,9 +1219,24 @@ public class GuiManager implements Listener {
 
         if (ctx.equals("abyssal")) {
             ConfigurationSection layout = gui.getConfigurationSection("abyssal.layout");
-            int[] slots = new int[]{ layout.getInt("target_slot", 20), layout.getInt("bone_slot", 24) };
-            refundSlots(player, e.getInventory(), slots);
-            rollStates.remove(id);
+            int targetSlot = layout.getInt("target_slot", 20);
+            int boneSlot = layout.getInt("bone_slot", 24);
+
+            // Check if there was an active roll - if so, consume the bone (discard)
+            RollState activeRoll = rollStates.remove(id);
+            if (activeRoll != null) {
+                // Roll was in progress - bone is consumed as discard
+                ItemStack bone = e.getInventory().getItem(boneSlot);
+                if (bone != null && !bone.getType().isAir()) {
+                    e.getInventory().setItem(boneSlot, null);
+                    sendMessage(player, "bone_consumed_on_close", "&7Closing the enchanting interface discarded the roll. The bone was consumed.");
+                }
+                // Return only the target item
+                refundSlots(player, e.getInventory(), new int[]{targetSlot});
+            } else {
+                // No active roll - return both items
+                refundSlots(player, e.getInventory(), new int[]{targetSlot, boneSlot});
+            }
             return;
         }
 
@@ -1083,6 +1247,7 @@ public class GuiManager implements Listener {
         public String[] keys = new String[2];
         public double[] min = new double[2];
         public double[] max = new double[2];
+        public String[] effectType = new String[2];
         public int tier;
         public String category;
         public Inventory invRef;

@@ -30,6 +30,14 @@ public class ScientistCommand implements CommandExecutor, TabCompleter {
                 sendMessage(sender, "not_player", "&cThis command is only for players.");
                 return true;
             }
+            int requiredLevel = 45;
+            if (p.getLevel() < requiredLevel) {
+                String prefix = msg.getString("prefix", "");
+                String template = msg.getString("gui_level_requirement", "&cYou must reach level {level}+ to access this laboratory.");
+                String formatted = template.replace("{level}", String.valueOf(requiredLevel));
+                p.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(prefix + formatted));
+                return true;
+            }
             plugin.getGuiManager().openMain(p);
             return true;
         }
@@ -42,6 +50,7 @@ public class ScientistCommand implements CommandExecutor, TabCompleter {
                     return true;
                 }
                 plugin.getConfigManager().reloadAll();
+                plugin.getResearchService().syncRecipeDefinitions();
                 sendMessage(sender, "reloaded", "&aScientist configs reloaded.");
             }
             case "progress" -> {

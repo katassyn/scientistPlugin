@@ -38,6 +38,7 @@ public final class ScientistPlugin extends JavaPlugin {
         this.itemService = new ItemService(this);
         this.researchService = new ResearchService(this, itemService);
         this.abyssalService = new AbyssalService(this, itemService);
+        this.researchService.syncRecipeDefinitions();
         this.guiManager = new GuiManager(this, itemService);
 
         // Commands

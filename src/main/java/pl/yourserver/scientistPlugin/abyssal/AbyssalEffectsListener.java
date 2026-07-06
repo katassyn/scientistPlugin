@@ -53,6 +53,8 @@ public class AbyssalEffectsListener implements Listener {
     private final Map<UUID, Map<UUID, Long>> markedTargets = new ConcurrentHashMap<>();
     private final Map<UUID, Long> spellMenderCooldown = new ConcurrentHashMap<>();
     private final Map<UUID, Long> lastPackTick = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> lastRegenTick = new ConcurrentHashMap<>();
+    private final Map<UUID, AttributeModifier> flatHealthMods = new ConcurrentHashMap<>();
 
     public AbyssalEffectsListener(ScientistPlugin plugin, AbyssalService service) {
         this.plugin = plugin;
@@ -92,105 +94,107 @@ public class AbyssalEffectsListener implements Listener {
         if (!(e.getEntity() instanceof LivingEntity target)) return;
 
         ItemStack main = attacker.getInventory().getItem(EquipmentSlot.HAND);
-        JsonObject tag = readTag(main);
-        if (tag == null) return;
-        String key = optString(tag, "modifier_key");
-        int tier = optInt(tag, "tier", 1);
-        double val = optDouble(tag, "value", 0.0);
+        JsonObject weaponTag = readTag(main);
+        String weaponKey = weaponTag != null ? optString(weaponTag, "modifier_key") : null;
+        int weaponTier = weaponTag != null ? optInt(weaponTag, "tier", 1) : 0;
+        double weaponVal = weaponTag != null ? optDouble(weaponTag, "value", 0.0) : 0.0;
 
         double dmg = e.getDamage();
 
-        switch (key) {
-            case "void_rend" -> {
-                // +% Damage
-                double bonus = dmg * (val / 100.0);
-                e.setDamage(dmg + bonus);
-            }
-            case "rift_pierce" -> {
-                // Treat as extra % damage (placeholder for armor pen integration)
-                double bonus = dmg * (val / 100.0);
-                e.setDamage(dmg + bonus);
-            }
-            case "bloodsiphon" -> {
-                // Lifesteal % of final damage (post event)
-                Bukkit.getScheduler().runTask(plugin, () -> {
-                    double finalDmg = e.getFinalDamage();
-                    double amp = 0.0;
-                    try {
-                        Double a = attacker.getPersistentDataContainer().get(new org.bukkit.NamespacedKey(plugin, "leech_amp"), org.bukkit.persistence.PersistentDataType.DOUBLE);
-                        if (a != null) amp = a;
-                    } catch (Throwable ignored) {}
-                    double heal = finalDmg * ((val + amp) / 100.0);
-                    attacker.setHealth(Math.min(attacker.getMaxHealth(), attacker.getHealth() + heal));
-                });
-            }
-            case "severing_hex" -> {
-                // Healing received debuff on target (3s)
-                long until = System.currentTimeMillis() + 3000L;
-                severing.put(target.getUniqueId(), new Debuff(until, val));
-            }
-            case "frostbrand" -> {
-                // On-hit slow chance (2s); value is chance %
-                if (ThreadLocalRandom.current().nextDouble(100.0) <= val) {
-                    int ticks = 40; // 2s
-                    target.addPotionEffect(new org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.SLOW, ticks, Math.max(0, tier - 1), false, true, true));
+        // Apply weapon-held effects only if the weapon has an Abyssal tag
+        if (weaponTag != null && weaponKey != null) {
+            switch (weaponKey) {
+                case "void_rend" -> {
+                    double bonus = dmg * (weaponVal / 100.0);
+                    e.setDamage(dmg + bonus);
+                    dmg = e.getDamage();
                 }
-            }
-            case "emberbrand" -> {
-                // Burn DoT based on tier: 20/40/60 fire ticks
-                int fireTicks = 20 * tier;
-                target.setFireTicks(Math.max(target.getFireTicks(), fireTicks));
-            }
-            case "echo_slash" -> {
-                // Chance to echo strike for 50% damage
-                if (ThreadLocalRandom.current().nextDouble(100.0) <= val) {
-                    double extra = e.getFinalDamage() * 0.5;
-                    double dealt = Math.max(0.0, extra);
-                    Bukkit.getScheduler().runTask(plugin, () -> target.damage(dealt, attacker));
+                case "rift_pierce" -> {
+                    double bonus = dmg * (weaponVal / 100.0);
+                    e.setDamage(dmg + bonus);
+                    dmg = e.getDamage();
                 }
-            }
-            case "braced_core" -> {
-                // Outgoing knockback reduction when wearer attacks (scale target velocity)
-                if (e.getEntity() instanceof LivingEntity le) {
+                case "executioner" -> {
+                    // LOW_ENEMY_HP_DMG_PCT - bonus damage vs low HP enemies
+                    double targetHpRatio = target.getHealth() / Math.max(1.0, target.getMaxHealth());
+                    if (targetHpRatio < 0.30) {
+                        double bonus = dmg * (weaponVal / 100.0);
+                        e.setDamage(dmg + bonus);
+                        dmg = e.getDamage();
+                    }
+                }
+                case "bloodsiphon" -> {
                     Bukkit.getScheduler().runTask(plugin, () -> {
-                        var vel = le.getVelocity();
-                        le.setVelocity(vel.multiply(Math.max(0.0, 1.0 - (val / 100.0))));
+                        double finalDmg = e.getFinalDamage();
+                        double amp = 0.0;
+                        try {
+                            Double a = attacker.getPersistentDataContainer().get(new org.bukkit.NamespacedKey(plugin, "leech_amp"), org.bukkit.persistence.PersistentDataType.DOUBLE);
+                            if (a != null) amp = a;
+                        } catch (Throwable ignored) {}
+                        double heal = finalDmg * ((weaponVal + amp) / 100.0);
+                        attacker.setHealth(Math.min(attacker.getMaxHealth(), attacker.getHealth() + heal));
                     });
                 }
-            }
-            case "soul_harvester" -> {
-                // Damage vs Elites/Bosses % (treat any MythicMob as elite/boss)
-                if (isMythic(target)) {
-                    double bonus = dmg * (val / 100.0);
-                    e.setDamage(dmg + bonus);
+                case "severing_hex" -> {
+                    long until = System.currentTimeMillis() + 3000L;
+                    severing.put(target.getUniqueId(), new Debuff(until, weaponVal));
                 }
-            }
-            case "cold_focus" -> {
-                // Crit Damage % (approximate as +% damage)
-                double bonus = dmg * (val / 100.0);
-                e.setDamage(dmg + bonus);
-            }
-            case "stormlash" -> {
-                // Chain lightning chance: tier-based damage multiplier
-                if (ThreadLocalRandom.current().nextDouble(100.0) <= val) {
-                    double mult = switch (tier) {
-                        case 1 -> 0.30; case 2 -> 0.35; default -> 0.40; };
-                    double chainDmg = e.getFinalDamage() * mult;
-                    int bounces = Math.min(3, 1 + tier); // 2-3 targets
-                    var nearby = target.getWorld().getNearbyEntities(target.getLocation(), 5, 5, 5);
-                    int hit = 0;
-                    for (var en : nearby) {
-                        if (hit >= bounces) break;
-                        if (en instanceof LivingEntity le && !le.getUniqueId().equals(target.getUniqueId()) && !le.getUniqueId().equals(attacker.getUniqueId())) {
-                            hit++;
-                            LivingEntity le2 = le;
-                            Bukkit.getScheduler().runTask(plugin, () -> le2.damage(Math.max(0.0, chainDmg), attacker));
+                case "frostbrand" -> {
+                    if (ThreadLocalRandom.current().nextDouble(100.0) <= weaponVal) {
+                        int ticks = 40; // 2s
+                        target.addPotionEffect(new org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.SLOW, ticks, Math.max(0, weaponTier - 1), false, true, true));
+                    }
+                }
+                case "emberbrand" -> {
+                    // Apply burn damage over time
+                    double burnDmg = weaponVal; // weaponVal is the flat burn damage
+                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                        if (target.isValid() && !target.isDead()) {
+                            target.damage(burnDmg, attacker);
+                            target.setFireTicks(60); // Visual fire effect (3 seconds)
+                        }
+                    }, 20L); // Apply after 1 second
+                }
+                case "echo_slash" -> {
+                    if (ThreadLocalRandom.current().nextDouble(100.0) <= weaponVal) {
+                        double extra = e.getFinalDamage() * 0.5;
+                        double dealt = Math.max(0.0, extra);
+                        Bukkit.getScheduler().runTask(plugin, () -> target.damage(dealt, attacker));
+                    }
+                }
+                case "braced_core" -> {
+                    if (e.getEntity() instanceof LivingEntity le) {
+                        Bukkit.getScheduler().runTask(plugin, () -> {
+                            var vel = le.getVelocity();
+                            le.setVelocity(vel.multiply(Math.max(0.0, 1.0 - (weaponVal / 100.0))));
+                        });
+                    }
+                }
+                case "soul_harvester" -> {
+                    // Works on all mobs now, not just mythic
+                    double bonus = dmg * (weaponVal / 100.0);
+                    e.setDamage(dmg + bonus);
+                    dmg = e.getDamage();
+                }
+                case "stormlash" -> {
+                    if (ThreadLocalRandom.current().nextDouble(100.0) <= weaponVal) {
+                        double mult = switch (Math.max(1, weaponTier)) {
+                            case 1 -> 0.30; case 2 -> 0.35; default -> 0.40; };
+                        double chainDmg = e.getFinalDamage() * mult;
+                        int bounces = Math.min(3, 1 + Math.max(1, weaponTier)); // 2-3 targets
+                        var nearby = target.getWorld().getNearbyEntities(target.getLocation(), 5, 5, 5);
+                        int hit = 0;
+                        for (var en : nearby) {
+                            if (hit >= bounces) break;
+                            if (en instanceof LivingEntity le && !le.getUniqueId().equals(target.getUniqueId()) && !le.getUniqueId().equals(attacker.getUniqueId())) {
+                                hit++;
+                                LivingEntity le2 = le;
+                                Bukkit.getScheduler().runTask(plugin, () -> le2.damage(Math.max(0.0, chainDmg), attacker));
+                            }
                         }
                     }
                 }
-            }
-            default -> {
-                // no-op for now
+                default -> { /* no-op */ }
             }
         }
         // GLOVES: vampiric_grasp – lifesteal on crit (% of final damage)
@@ -227,13 +231,15 @@ public class AbyssalEffectsListener implements Listener {
         }
         // RINGS: hunter_mark – mark + dmg vs marked
         double markChance = Math.max(getAccessoryValue(attacker, "RING_1", "hunter_mark"), getAccessoryValue(attacker, "RING_2", "hunter_mark"));
+        int markTier = Math.max(getAccessoryTier(attacker, "RING_1", "hunter_mark"), getAccessoryTier(attacker, "RING_2", "hunter_mark"));
         if (markChance > 0 && ThreadLocalRandom.current().nextDouble(100.0) <= markChance) {
             markedTargets.computeIfAbsent(attacker.getUniqueId(), k -> new HashMap<>())
                     .put(target.getUniqueId(), System.currentTimeMillis() + 6000L);
         }
         Long until = markedTargets.getOrDefault(attacker.getUniqueId(), Collections.emptyMap()).get(target.getUniqueId());
         if (until != null && until > System.currentTimeMillis()) {
-            double vsMarked = switch (tier) { case 1 -> 5.0; case 2 -> 8.0; default -> 12.0; };
+            int t = Math.max(1, markTier);
+            double vsMarked = switch (t) { case 1 -> 5.0; case 2 -> 8.0; default -> 12.0; };
             e.setDamage(e.getDamage() * (1.0 + vsMarked / 100.0));
         }
 
@@ -247,6 +253,12 @@ public class AbyssalEffectsListener implements Listener {
             comboStacks.put(attacker.getUniqueId(), stacks);
             comboExpires.put(attacker.getUniqueId(), now + 3000L);
             e.setDamage(e.getDamage() * (1.0 + (stacks * comboVal) / 100.0));
+        }
+
+        // GLOVES: iron_fist – flat melee damage
+        double ironFist = getAccessoryValue(attacker, "GLOVES", "iron_fist");
+        if (ironFist > 0 && !(e.getDamager() instanceof Projectile)) {
+            e.setDamage(e.getDamage() + ironFist);
         }
 
         // Mark attacker in combat
@@ -311,6 +323,26 @@ public class AbyssalEffectsListener implements Listener {
                 double dr = optDouble(helmTag, "value", 0.0);
                 e.setDamage(dmg * Math.max(0.0, 1.0 - dr / 100.0));
                 dmg = e.getDamage();
+            }
+        }
+
+        // ACCESSORY: spellward – magic damage reduction
+        if (victim instanceof Player) {
+            Player vp = (Player) victim;
+            double magicDR = getAccessoryValue(vp, "RING_1", "spellward");
+            magicDR = Math.max(magicDR, getAccessoryValue(vp, "RING_2", "spellward"));
+            magicDR = Math.max(magicDR, getAccessoryValue(vp, "NECKLACE", "spellward"));
+            if (magicDR > 0) {
+                // Check if damage is from magic sources (potion, magic, etc)
+                EntityDamageEvent.DamageCause cause = e.getCause();
+                boolean isMagic = cause == EntityDamageEvent.DamageCause.MAGIC
+                    || cause == EntityDamageEvent.DamageCause.POISON
+                    || cause == EntityDamageEvent.DamageCause.WITHER
+                    || cause == EntityDamageEvent.DamageCause.DRAGON_BREATH;
+                if (isMagic) {
+                    e.setDamage(dmg * Math.max(0.0, 1.0 - magicDR / 100.0));
+                    dmg = e.getDamage();
+                }
             }
         }
 
@@ -671,6 +703,25 @@ public class AbyssalEffectsListener implements Listener {
     @EventHandler
     public void onMove(PlayerMoveEvent e) {
         Player p = e.getPlayer();
+
+        // BELT: battle_focus – combat regeneration
+        double combatRegen = getAccessoryValue(p, "BELT", "battle_focus");
+        if (combatRegen > 0) {
+            long now = System.currentTimeMillis();
+            long lastCombatTime = lastCombat.getOrDefault(p.getUniqueId(), 0L);
+            // Only regen if in combat (within last 10 seconds)
+            if (now - lastCombatTime < 10000L) {
+                long lastRegen = lastRegenTick.getOrDefault(p.getUniqueId(), 0L);
+                if (now - lastRegen > 2000L) { // Heal every 2 seconds
+                    double baseRegen = p.getMaxHealth() * 0.01; // 1% of max HP base
+                    double heal = baseRegen * (combatRegen / 100.0);
+                    double newHp = Math.min(p.getMaxHealth(), p.getHealth() + heal);
+                    p.setHealth(newHp);
+                    lastRegenTick.put(p.getUniqueId(), now);
+                }
+            }
+        }
+
         ItemStack boots = p.getInventory().getItem(EquipmentSlot.FEET);
         JsonObject tag = readTag(boots);
         if (tag != null && "trailblazer".equals(optString(tag, "modifier_key"))) {
@@ -867,6 +918,24 @@ public class AbyssalEffectsListener implements Listener {
             hp.addModifier(mod);
             chestHP.put(p.getUniqueId(), mod);
         }
+
+        // WILDCARD: titan_blood – flat max health
+        AttributeModifier oldFlatHp = flatHealthMods.remove(p.getUniqueId());
+        if (hp != null && oldFlatHp != null) hp.removeModifier(oldFlatHp);
+        double flatHp = 0.0;
+        // Check all armor pieces for titan_blood
+        for (EquipmentSlot slot : new EquipmentSlot[]{EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET}) {
+            ItemStack armor = p.getInventory().getItem(slot);
+            JsonObject tag = readTag(armor);
+            if (tag != null && "titan_blood".equals(optString(tag, "modifier_key"))) {
+                flatHp = Math.max(flatHp, optDouble(tag, "value", 0.0));
+            }
+        }
+        if (hp != null && flatHp > 0) {
+            AttributeModifier mod = new AttributeModifier(UUID.randomUUID(), "sci-titanblood", flatHp, AttributeModifier.Operation.ADD_NUMBER);
+            hp.addModifier(mod);
+            flatHealthMods.put(p.getUniqueId(), mod);
+        }
         // Legs: striders_pace – movement speed %
         ItemStack legs = p.getInventory().getItem(EquipmentSlot.LEGS);
         JsonObject legsTag = readTag(legs);
@@ -891,6 +960,8 @@ public class AbyssalEffectsListener implements Listener {
         AttributeInstance hp = p.getAttribute(Attribute.GENERIC_MAX_HEALTH);
         AttributeModifier m1 = chestHP.remove(p.getUniqueId());
         if (hp != null && m1 != null) hp.removeModifier(m1);
+        AttributeModifier m3 = flatHealthMods.remove(p.getUniqueId());
+        if (hp != null && m3 != null) hp.removeModifier(m3);
         AttributeInstance ms = p.getAttribute(Attribute.GENERIC_MOVEMENT_SPEED);
         AttributeModifier m2 = legsSpeed.remove(p.getUniqueId());
         if (ms != null && m2 != null) ms.removeModifier(m2);
@@ -903,7 +974,15 @@ public class AbyssalEffectsListener implements Listener {
             Object trInst = trinketsCls.getMethod("getInstance").invoke(null);
             Object dbm = trinketsCls.getMethod("getDatabaseManager").invoke(trInst);
             Object pdata = dbm.getClass().getMethod("getPlayerData", java.util.UUID.class).invoke(dbm, p.getUniqueId());
-            if (pdata == null) return 0.0;
+            if (pdata == null) {
+                try {
+                    dbm.getClass().getMethod("loadPlayerDataSync", java.util.UUID.class).invoke(dbm, p.getUniqueId());
+                } catch (Throwable ignored) { }
+                pdata = dbm.getClass().getMethod("getPlayerData", java.util.UUID.class).invoke(dbm, p.getUniqueId());
+                if (pdata == null) {
+                    return 0.0;
+                }
+            }
             Class<?> accType = Class.forName("com.maks.trinketsplugin.AccessoryType");
             Object enumConst = null;
             for (Object c : (Object[]) accType.getMethod("values").invoke(null)) {
@@ -921,6 +1000,42 @@ public class AbyssalEffectsListener implements Listener {
             return jo.get("value").getAsDouble();
         } catch (Throwable t) {
             return 0.0;
+        }
+    }
+
+    // Read a modifier tier from a Trinkets accessory slot
+    private int getAccessoryTier(Player p, String typeName, String matchKey) {
+        try {
+            Class<?> trinketsCls = Class.forName("com.maks.trinketsplugin.TrinketsPlugin");
+            Object trInst = trinketsCls.getMethod("getInstance").invoke(null);
+            Object dbm = trinketsCls.getMethod("getDatabaseManager").invoke(trInst);
+            Object pdata = dbm.getClass().getMethod("getPlayerData", java.util.UUID.class).invoke(dbm, p.getUniqueId());
+            if (pdata == null) {
+                try {
+                    dbm.getClass().getMethod("loadPlayerDataSync", java.util.UUID.class).invoke(dbm, p.getUniqueId());
+                } catch (Throwable ignored) { }
+                pdata = dbm.getClass().getMethod("getPlayerData", java.util.UUID.class).invoke(dbm, p.getUniqueId());
+                if (pdata == null) {
+                    return 0;
+                }
+            }
+            Class<?> accType = Class.forName("com.maks.trinketsplugin.AccessoryType");
+            Object enumConst = null;
+            for (Object c : (Object[]) accType.getMethod("values").invoke(null)) {
+                if (c.toString().equalsIgnoreCase(typeName)) { enumConst = c; break; }
+            }
+            if (enumConst == null) return 0;
+            Object item = pdata.getClass().getMethod("getAccessory", accType).invoke(pdata, enumConst);
+            if (!(item instanceof ItemStack is)) return 0;
+            ItemMeta meta = is.getItemMeta();
+            if (meta == null) return 0;
+            String raw = meta.getPersistentDataContainer().get(new org.bukkit.NamespacedKey(plugin, "abyssal"), PersistentDataType.STRING);
+            if (raw == null || raw.isEmpty()) return 0;
+            JsonObject jo = com.google.gson.JsonParser.parseString(raw).getAsJsonObject();
+            if (!jo.has("modifier_key") || !jo.get("modifier_key").getAsString().equals(matchKey)) return 0;
+            return jo.has("tier") ? Math.max(1, jo.get("tier").getAsInt()) : 1;
+        } catch (Throwable t) {
+            return 0;
         }
     }
 

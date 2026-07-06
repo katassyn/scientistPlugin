@@ -15,7 +15,7 @@ commands:
 permissions:
   scientist.use:
     description: Use Scientist features
-    default: true
+    default: false
   scientist.admin:
     description: Admin commands for Scientist
     default: op

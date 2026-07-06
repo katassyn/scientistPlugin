@@ -25,6 +25,41 @@ public class ResearchService {
         this.itemService = itemService;
     }
 
+    /**
+     * Ensure all configured recipes exist in the sci_recipe table so foreign key
+     * constraints do not block experiment logging.
+     */
+    public void syncRecipeDefinitions() {
+        FileConfiguration recipesCfg = plugin.getConfigManager().recipes();
+        if (recipesCfg == null) {
+            return;
+        }
+        ConfigurationSection recSec = recipesCfg.getConfigurationSection("recipes");
+        if (recSec == null || recSec.getKeys(false).isEmpty()) {
+            return;
+        }
+        String sql = "INSERT INTO sci_recipe (recipe_key, title, description) VALUES (?,?,?) " +
+                "ON DUPLICATE KEY UPDATE title=VALUES(title), description=VALUES(description)";
+        try (Connection c = plugin.getDatabase().getConnection();
+             PreparedStatement ps = c.prepareStatement(sql)) {
+            for (String key : recSec.getKeys(false)) {
+                ConfigurationSection recipe = recSec.getConfigurationSection(key);
+                if (recipe == null) {
+                    continue;
+                }
+                String title = recipe.getString("title", key);
+                String description = recipe.getString("description", "");
+                ps.setString(1, key);
+                ps.setString(2, title == null ? key : title);
+                ps.setString(3, description == null ? "" : description);
+                ps.addBatch();
+            }
+            ps.executeBatch();
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Failed to sync recipe definitions: " + e.getMessage());
+        }
+    }
+
     public void startReadyPoller() {
         // every 60s mark finished
         this.taskId = Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, () -> {
@@ -73,6 +108,13 @@ public class ResearchService {
             return false;
         }
 
+        RecipeStatus currentStatus = status.get(recipeKey);
+        if (currentStatus != null && currentStatus.unlocked) {
+            String text = plugin.getConfigManager().messages().getString("experiment_already_mastered", "&aThis experiment has already been mastered.");
+            player.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(text));
+            return false;
+        }
+
         markExpiredExperiments(player.getUniqueId());
         int running = countRunningExperiments(player.getUniqueId());
         int maxConc = plugin.getConfig().getInt("experiments.max_concurrent_per_player", 1);
@@ -115,9 +157,15 @@ public class ResearchService {
             return false;
         }
 
-        int durationHours = recipe.getInt("duration_hours", plugin.getConfig().getInt("experiments.default_duration_hours", 4));
+        int durationHours = resolveExperimentDurationHours(recipe);
+        boolean debugMode = plugin.getConfig().getBoolean("debug.mode", false);
+        long durationSeconds = durationHours * 3600L;
+        if (debugMode) {
+            long debugSeconds = plugin.getConfig().getLong("debug.short_experiments_seconds", 5L);
+            durationSeconds = Math.max(1L, debugSeconds);
+        }
         long start = Instant.now().getEpochSecond();
-        long endAt = start + durationHours * 3600L;
+        long endAt = start + durationSeconds;
 
         Map<String, Integer> reagentsUsed = new LinkedHashMap<>(reagents);
         try (Connection c = plugin.getDatabase().getConnection()) {
@@ -144,13 +192,54 @@ public class ResearchService {
 
         String title = recipe.getString("title", recipeKey);
         final String sendTitle = title;
-        final int sendHours = durationHours;
+        final String sendDuration = debugMode ? formatDurationText(durationSeconds) : formatDurationText(durationHours * 3600L);
         plugin.getServer().getScheduler().runTask(plugin, () -> {
             String msgText = plugin.getConfigManager().messages().getString("experiment_started", "Experiment started");
-            msgText = msgText.replace("{recipe}", sendTitle).replace("{hours}", String.valueOf(sendHours));
+            msgText = msgText.replace("{recipe}", sendTitle);
+            msgText = msgText.replace("{hours}", sendDuration);
+            msgText = msgText.replace("{duration}", sendDuration);
             player.sendMessage(pl.yourserver.scientistPlugin.util.Texts.legacy(msgText));
         });
         return true;
+    }
+
+    private String formatDurationText(long seconds) {
+        if (seconds <= 0) {
+            return "0s";
+        }
+        long hours = seconds / 3600;
+        long minutes = (seconds % 3600) / 60;
+        long secs = seconds % 60;
+        StringBuilder sb = new StringBuilder();
+        if (hours > 0) {
+            sb.append(hours).append("h");
+        }
+        if (minutes > 0) {
+            if (sb.length() > 0) {
+                sb.append(" ");
+            }
+            sb.append(minutes).append("m");
+        }
+        if (hours == 0 || secs > 0) {
+            if (sb.length() > 0) {
+                sb.append(" ");
+            }
+            sb.append(secs).append("s");
+        }
+        return sb.toString().trim();
+    }
+
+    private int resolveUnlockThreshold(ConfigurationSection recipeSection) {
+        int defaultThreshold = plugin.getConfig().getInt("experiments.default_experiments_to_unlock", 5);
+        return Math.max(1, recipeSection.getInt("experiments_to_unlock", defaultThreshold));
+    }
+
+    private int resolveExperimentDurationHours(ConfigurationSection recipeSection) {
+        int defaultHours = plugin.getConfig().getInt("experiments.default_duration_hours", 4);
+        int totalHours = Math.max(1, recipeSection.getInt("duration_hours", defaultHours));
+        int threshold = resolveUnlockThreshold(recipeSection);
+        int perExperiment = (int) Math.ceil(totalHours / (double) Math.max(1, threshold));
+        return Math.max(1, perExperiment);
     }
 
     public List<TemplateView> buildTemplates(UUID uuid) {
@@ -178,14 +267,16 @@ public class ResearchService {
             ActiveExperiment active = running.get(key);
             long endEpoch = active != null ? active.endEpoch : 0L;
             boolean runningNow = active != null && endEpoch > now;
+            int unlockThreshold = resolveUnlockThreshold(recipe);
+            int durationHours = resolveExperimentDurationHours(recipe);
             templates.add(new TemplateView(
                     key,
                     recipe.getString("title", key),
                     recipe.getString("description", ""),
                     reagents,
                     requires == null ? Collections.emptyList() : requires,
-                    recipe.getInt("duration_hours", plugin.getConfig().getInt("experiments.default_duration_hours", 4)),
-                    recipe.getInt("experiments_to_unlock", 5),
+                    durationHours,
+                    unlockThreshold,
                     rs.experimentsDone,
                     rs.unlocked,
                     prereq,
@@ -249,6 +340,22 @@ public class ResearchService {
         } catch (SQLException e) {
             e.printStackTrace();
         }
+    }
+
+    public int countFinishedExperiments(UUID uuid) {
+        markExpiredExperiments(uuid);
+        try (Connection c = plugin.getDatabase().getConnection();
+             PreparedStatement ps = c.prepareStatement("SELECT COUNT(*) FROM sci_experiment WHERE player_uuid=UNHEX(REPLACE(?,'-','')) AND status='FINISHED'")) {
+            ps.setString(1, uuid.toString());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return 0;
     }
 
     private boolean prerequisitesMet(Map<String, RecipeStatus> statusMap, ConfigurationSection recipeSection) {
@@ -318,13 +425,20 @@ public class ResearchService {
             }
             // Increment per-recipe counters and unlock
             FileConfiguration recipesCfg = plugin.getConfigManager().recipes();
+            ConfigurationSection recipesSection = recipesCfg.getConfigurationSection("recipes");
             for (String r : finished) {
-                try (PreparedStatement ins = c.prepareStatement("INSERT INTO sci_player_recipe (player_uuid,recipe_key,unlocked,experiments_done) VALUES (UNHEX(REPLACE(?,'-','')),?,0,0) ON DUPLICATE KEY UPDATE experiments_done = experiments_done + 1")) {
+                try (PreparedStatement ins = c.prepareStatement("INSERT INTO sci_player_recipe (player_uuid,recipe_key,unlocked,experiments_done) VALUES (UNHEX(REPLACE(?,'-','')),?,0,1) ON DUPLICATE KEY UPDATE experiments_done = experiments_done + 1")) {
                     ins.setString(1, p.getUniqueId().toString());
                     ins.setString(2, r);
                     ins.executeUpdate();
                 }
-                int threshold = recipesCfg.getConfigurationSection("recipes").getConfigurationSection(r).getInt("experiments_to_unlock", 5);
+                int threshold = plugin.getConfig().getInt("experiments.default_experiments_to_unlock", 5);
+                if (recipesSection != null) {
+                    ConfigurationSection recipe = recipesSection.getConfigurationSection(r);
+                    if (recipe != null) {
+                        threshold = resolveUnlockThreshold(recipe);
+                    }
+                }
                 try (PreparedStatement upd = c.prepareStatement("UPDATE sci_player_recipe SET unlocked = (experiments_done >= ?) WHERE player_uuid=UNHEX(REPLACE(?,'-','')) AND recipe_key=?")) {
                     upd.setInt(1, threshold);
                     upd.setString(2, p.getUniqueId().toString());
